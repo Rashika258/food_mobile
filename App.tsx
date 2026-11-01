@@ -317,6 +317,39 @@ function FoodAppMain() {
                 <Text style={styles.statLabel}>Daily Tiffin Subs</Text>
               </View>
             </View>
+
+            {/* Instant Daily UPI Withdrawal */}
+            <TouchableOpacity
+              style={{
+                marginTop: 12,
+                backgroundColor: '#ECFDF5',
+                borderWidth: 1,
+                borderColor: '#A7F3D0',
+                borderRadius: 12,
+                padding: 10,
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+              onPress={() => {
+                Alert.alert(
+                  '⚡ UPI Instant Settlement',
+                  '₹2,520 transferred directly to anita@okhdfcbank!\nReference: UPI-984210\nZero deduction fee.'
+                );
+              }}
+            >
+              <View>
+                <Text style={{ fontSize: 11, fontWeight: '900', color: '#065F46' }}>
+                  ⚡ Instant UPI Transfer Available
+                </Text>
+                <Text style={{ fontSize: 9, color: '#047857' }}>
+                  Withdraw ₹2,520 to anita@okhdfcbank now
+                </Text>
+              </View>
+              <View style={{ backgroundColor: '#059669', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 }}>
+                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>Withdraw Now →</Text>
+              </View>
+            </TouchableOpacity>
           </View>
 
           {/* Live Kitchen Cooking Board */}
@@ -505,6 +538,87 @@ function FoodAppMain() {
               ) : null}
             </View>
           </View>
+
+          {/* 15s Kitchen Stories Reels Bar */}
+          <View style={{ backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingBottom: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Text style={{ fontSize: 10 }}>🔴</Text>
+                <Text style={{ fontSize: 11, fontWeight: '900', color: '#0F172A', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  15s Cook Stories &amp; Prep
+                </Text>
+              </View>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: '#EA580C' }}>Tap to view</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+              {[
+                { name: 'Anita D.', kitchen: 'Ghar Ka Khana', emoji: '👩‍🍳', tag: 'Pure Ghee' },
+                { name: 'Amma M.', kitchen: 'South Kitchen', emoji: '👵', tag: 'Stone Ground' },
+                { name: 'Tariq K.', kitchen: 'Royal Biryani', emoji: '👨‍🍳', tag: 'Clay Dum' },
+                { name: 'Suman L.', kitchen: 'Pahadi Rasoi', emoji: '🥘', tag: 'Cast Iron' },
+              ].map((s, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => {
+                    Alert.alert(
+                      `📹 ${s.name} • ${s.kitchen}`,
+                      `"Cooking fresh in 100% cold-pressed groundnut oil. Phulkas made by hand directly over the flame."\n\nFeatured Dish: Daily Special Thali (₹160)\nTag: ${s.tag}`
+                    );
+                  }}
+                  style={{ alignItems: 'center', width: 62 }}
+                >
+                  <View style={{ width: 52, height: 52, borderRadius: 26, borderWidth: 2.5, borderColor: '#EA580C', padding: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF7ED' }}>
+                    <Text style={{ fontSize: 24 }}>{s.emoji}</Text>
+                  </View>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#0F172A', marginTop: 3 }} numberOfLines={1}>
+                    {s.name}
+                  </Text>
+                  <Text style={{ fontSize: 8, color: '#EA580C', fontWeight: '700' }} numberOfLines={1}>
+                    {s.tag}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* AI Health Diet Protocol Chips */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ backgroundColor: '#F8FAFC', paddingVertical: 8, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}
+            contentContainerStyle={{ gap: 6 }}
+          >
+            {[
+              { id: '', label: 'All Menus' },
+              { id: 'diabetic', label: '🩺 Diabetic Low-GI' },
+              { id: 'heart', label: '🫀 Heart Low-Sodium' },
+              { id: 'protein', label: '💪 35g+ Veg Protein' },
+              { id: 'pcos', label: '🥑 PCOS Balance' },
+            ].map((chip) => (
+              <TouchableOpacity
+                key={chip.id}
+                onPress={() => setSearch(chip.id ? chip.label.split(' ')[1] : '')}
+                style={{
+                  backgroundColor: search.toLowerCase().includes(chip.id) && chip.id ? '#0F766E' : '#FFFFFF',
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: search.toLowerCase().includes(chip.id) && chip.id ? '#0F766E' : '#CBD5E1',
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 10,
+                    fontWeight: '800',
+                    color: search.toLowerCase().includes(chip.id) && chip.id ? '#FFFFFF' : '#334155',
+                  }}
+                >
+                  {chip.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
           {/* Dual Marketplace Toggle */}
           <View style={styles.tabContainer}>
@@ -1002,6 +1116,34 @@ function FoodAppMain() {
                   onChangeText={setChefCustomNote}
                   style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 11, color: '#78350F' }}
                 />
+              </View>
+
+              {/* Care For Elders & Gifting */}
+              <View style={[styles.cartSection, { backgroundColor: '#FFF1F2', borderColor: '#FECDD3' }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ fontSize: 16 }}>👵</Text>
+                    <View>
+                      <Text style={{ fontSize: 11, fontWeight: '900', color: '#881337' }}>
+                        Care for Elders / Gift Meal
+                      </Text>
+                      <Text style={{ fontSize: 9, color: '#9F1239' }}>
+                        Printed love note on steel dabba pouch
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      Alert.alert(
+                        '👵 Elder Care Gifting Active',
+                        'A warm personalized love note will be printed on the dabba tag. Rider will ring the bell gently and ensure proper doorstep handover.'
+                      );
+                    }}
+                    style={{ backgroundColor: '#E11D48', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
+                  >
+                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>+ Add Note</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Delivery Slot Selection */}
