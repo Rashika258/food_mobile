@@ -72,6 +72,14 @@ function FoodAppMain() {
   const [returnDabba, setReturnDabba] = useState<boolean>(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
 
+  // Gated Society Pool & Customization
+  const [selectedSociety, setSelectedSociety] = useState<string>('Marvel Serenity');
+  const [isCommunityPoolActive, setIsCommunityPoolActive] = useState<boolean>(true);
+  const [spiceLevel, setSpiceLevel] = useState<'MILD' | 'MEDIUM' | 'TEEKHA'>('MEDIUM');
+  const [cookingFat, setCookingFat] = useState<'COLD_PRESSED' | 'GIR_GHEE' | 'LOW_OIL'>('COLD_PRESSED');
+  const [rotiChoice, setRotiChoice] = useState<'PHULKAS' | 'BHAKRI' | 'MULTIGRAIN'>('PHULKAS');
+  const [chefCustomNote, setChefCustomNote] = useState<string>('');
+
   // Active Order Tracking
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [trackingModalVisible, setTrackingModalVisible] = useState<boolean>(false);
@@ -141,7 +149,7 @@ function FoodAppMain() {
 
   const totalCartCount = cart.reduce((acc, ci) => acc + ci.quantity, 0);
   const cartSubtotal = cart.reduce((acc, ci) => acc + ci.item.price * ci.quantity, 0);
-  const deliveryFee = activeTab === 'HOME_KITCHEN' ? 0 : 35;
+  const deliveryFee = (isCommunityPoolActive || activeTab === 'HOME_KITCHEN') ? 0 : 35;
   const platformFee = 5;
   const grandTotal = cartSubtotal > 0 ? cartSubtotal + deliveryFee + platformFee : 0;
 
@@ -166,6 +174,8 @@ function FoodAppMain() {
         ? `${user.addresses[0].addressLine}, ${user.addresses[0].city}`
         : `${addressName}${subAddress ? ' (' + subAddress + ')' : ''}`;
 
+    const customInstructions = `Spice: ${spiceLevel}, Fat: ${cookingFat}, Roti: ${rotiChoice}${chefCustomNote ? ` | ${chefCustomNote}` : ''}`;
+
     const payload = {
       kitchenId: selectedKitchen?.id || 'k1',
       deliveryAddress,
@@ -180,10 +190,13 @@ function FoodAppMain() {
           ? 'Today, 8:00 PM'
           : undefined,
       dabbaReturned: returnDabba,
+      communitySocietyName: isCommunityPoolActive ? selectedSociety : undefined,
+      deliveryInstructions: customInstructions,
       items: cart.map((ci) => ({
         menuItemId: ci.item.id,
         quantity: ci.quantity,
         price: ci.item.price,
+        specialRequest: customInstructions,
       })),
     };
 
@@ -882,6 +895,113 @@ function FoodAppMain() {
                     </View>
                   </View>
                 ))}
+              </View>
+
+              {/* Gated Society Pool (FREE Delivery) */}
+              <View style={[styles.cartSection, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text style={[styles.cartSectionTitle, { color: '#1E3A8A', marginBottom: 0 }]}>
+                    🏢 Gated Society Pool (FREE Delivery)
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setIsCommunityPoolActive(!isCommunityPoolActive)}
+                    style={{ backgroundColor: isCommunityPoolActive ? '#2563EB' : '#FFFFFF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}
+                  >
+                    <Text style={{ fontSize: 10, fontWeight: '900', color: isCommunityPoolActive ? '#FFFFFF' : '#2563EB' }}>
+                      {isCommunityPoolActive ? '✓ Pooled' : '+ Join Pool'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {isCommunityPoolActive && (
+                  <View style={{ gap: 6, marginTop: 4 }}>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {['Marvel Serenity', 'Green Glen', 'Prestige Tech'].map((soc) => (
+                        <TouchableOpacity
+                          key={soc}
+                          onPress={() => setSelectedSociety(soc)}
+                          style={[
+                            { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DBEAFE' },
+                            selectedSociety === soc && { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+                          ]}
+                        >
+                          <Text style={[{ fontSize: 10, fontWeight: '800', color: '#1E40AF' }, selectedSociety === soc && { color: '#FFF' }]}>
+                            {soc}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={{ fontSize: 10, color: '#1D4ED8', fontStyle: 'italic', marginTop: 2 }}>
+                      🎉 Delivery fee waived! Neighbor batch drop at {deliverySlot === 'INSTANT' ? '1:00 PM' : 'Scheduled Slot'}.
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Homestyle Customizer */}
+              <View style={[styles.cartSection, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
+                <Text style={[styles.cartSectionTitle, { color: '#78350F' }]}>
+                  ✨ Maa Ke Haath Ka Touch (Cooked To Your Taste)
+                </Text>
+
+                {/* Spice selector */}
+                <Text style={{ fontSize: 10, fontWeight: '800', color: '#92400E', marginBottom: 4 }}>
+                  1. Spice Level:
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                  {[
+                    { id: 'MILD', label: '🌱 Mild' },
+                    { id: 'MEDIUM', label: '🥘 Medium' },
+                    { id: 'TEEKHA', label: '🔥 Teekha' },
+                  ].map((s) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      onPress={() => setSpiceLevel(s.id as any)}
+                      style={[
+                        { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#FDE68A' },
+                        spiceLevel === s.id && { backgroundColor: '#D97706', borderColor: '#D97706' },
+                      ]}
+                    >
+                      <Text style={[{ fontSize: 10, fontWeight: '800', color: '#78350F' }, spiceLevel === s.id && { color: '#FFF' }]}>
+                        {s.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Fat Selector */}
+                <Text style={{ fontSize: 10, fontWeight: '800', color: '#92400E', marginBottom: 4 }}>
+                  2. Cooking Fat:
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                  {[
+                    { id: 'COLD_PRESSED', label: 'Groundnut Oil' },
+                    { id: 'GIR_GHEE', label: 'Desi Cow Ghee' },
+                    { id: 'LOW_OIL', label: 'Low Oil Diet' },
+                  ].map((f) => (
+                    <TouchableOpacity
+                      key={f.id}
+                      onPress={() => setCookingFat(f.id as any)}
+                      style={[
+                        { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#FDE68A' },
+                        cookingFat === f.id && { backgroundColor: '#D97706', borderColor: '#D97706' },
+                      ]}
+                    >
+                      <Text style={[{ fontSize: 10, fontWeight: '800', color: '#78350F' }, cookingFat === f.id && { color: '#FFF' }]}>
+                        {f.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Custom Note input */}
+                <TextInput
+                  placeholder="Special note for home chef (e.g. keep dal runny, add lemon)..."
+                  placeholderTextColor="#A16207"
+                  value={chefCustomNote}
+                  onChangeText={setChefCustomNote}
+                  style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 11, color: '#78350F' }}
+                />
               </View>
 
               {/* Delivery Slot Selection */}
