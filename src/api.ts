@@ -1,4 +1,14 @@
-export const API_BASE_URL = 'http://10.203.111.160:5001/api/v1';
+import { Platform } from 'react-native';
+
+export const getApiBaseUrl = (): string => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const host = window.location.hostname || 'localhost';
+    return `http://${host}:5001/api/v1`;
+  }
+  return 'http://10.203.111.160:5001/api/v1';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export interface Kitchen {
   id: string;
@@ -345,27 +355,68 @@ export const FALLBACK_KITCHENS: Kitchen[] = [
   },
 ];
 
+// In-memory cache for ultra-fast tab/radius switching
+const kitchenCache = new Map<string, { data: Kitchen[]; timestamp: number }>();
+
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
 export const fetchNearbyKitchens = async (
   lat: number = 12.9304,
   lng: number = 77.6784,
   maxRadiusKm: number = 5,
   type?: string
 ): Promise<Kitchen[]> => {
+  const cacheKey = `${lat.toFixed(2)}_${lng.toFixed(2)}_${maxRadiusKm}_${type || 'ALL'}`;
+  const cached = kitchenCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 30000) {
+    return cached.data;
+  }
+
   try {
     let url = `${API_BASE_URL}/kitchens?lat=${lat}&lng=${lng}&maxRadiusKm=${maxRadiusKm}`;
     if (type) {
       url += `&type=${type}`;
     }
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 1200);
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
     const data = await res.json();
-    if (data.data && data.data.length > 0) return data.data;
-    return FALLBACK_KITCHENS.filter((k) => !type || k.type === type);
+    if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+      kitchenCache.set(cacheKey, { data: data.data, timestamp: Date.now() });
+      return data.data;
+    }
   } catch (error) {
-    return FALLBACK_KITCHENS.filter((k) => !type || k.type === type);
+    // Graceful fallback on network timeout
   }
+
+  // Fallback with live distance calculation relative to user
+  const fallbackResults = FALLBACK_KITCHENS.filter((k) => !type || k.type === type).map((k) => {
+    // If kitchen has lat/lng, compute real distance
+    const kitchenLat = k.id === 'k1' ? 12.935 : k.id === 'k2' ? 12.912 : k.id === 'k3' ? 12.916 : 12.935;
+    const kitchenLng = k.id === 'k1' ? 77.682 : k.id === 'k2' ? 77.644 : k.id === 'k3' ? 77.651 : 77.624;
+    const dist = calculateDistanceKm(lat, lng, kitchenLat, kitchenLng);
+    return {
+      ...k,
+      distanceKm: dist,
+      estimatedDeliveryMins: Math.min(60, (k.orderLeadTimeMinutes || 30) + Math.round((dist / 2) * 5)),
+    };
+  });
+
+  kitchenCache.set(cacheKey, { data: fallbackResults, timestamp: Date.now() });
+  return fallbackResults;
 };
 
 export const fetchKitchenDetails = async (id: string, lat?: number, lng?: number) => {
@@ -375,7 +426,7 @@ export const fetchKitchenDetails = async (id: string, lat?: number, lng?: number
       url += `?lat=${lat}&lng=${lng}`;
     }
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 1200);
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
     const data = await res.json();

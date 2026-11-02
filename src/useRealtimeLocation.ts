@@ -22,22 +22,48 @@ const DEFAULT_COORDS = {
 };
 const DEFAULT_ADDRESS = 'Bellandur, Bangalore';
 
+// Helper to resolve human-readable neighborhood quickly
+const resolveLocalArea = (lat: number, lng: number): { primary: string; secondary: string } => {
+  if (lat >= 12.85 && lat <= 13.15 && lng >= 77.45 && lng <= 77.85) {
+    if (lat > 12.96 && lng < 77.59) {
+      return { primary: 'Rajajinagar / Central', secondary: 'Bangalore, Karnataka' };
+    }
+    if (lat >= 12.95 && lng >= 77.59 && lng < 77.65) {
+      return { primary: 'Indiranagar / MG Road', secondary: 'Bangalore, Karnataka' };
+    }
+    if (lat <= 12.94 && lng >= 77.65) {
+      return { primary: 'Bellandur Outer Ring Rd', secondary: 'Bangalore, Karnataka' };
+    }
+    if (lat <= 12.94 && lng < 77.65) {
+      return { primary: 'Koramangala / HSR', secondary: 'Bangalore, Karnataka' };
+    }
+    return { primary: 'Bangalore Urban', secondary: 'Karnataka' };
+  }
+  return { primary: `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`, secondary: 'Live GPS Location' };
+};
+
 export function useRealtimeLocation(): LocationState {
   const [coords, setCoords] = useState<{ latitude: number; longitude: number }>(DEFAULT_COORDS);
   const [addressName, setAddressName] = useState<string>(DEFAULT_ADDRESS);
   const [subAddress, setSubAddress] = useState<string>('Bangalore, Karnataka');
-  const [loadingLocation, setLoadingLocation] = useState<boolean>(true);
-  const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
+  const [loadingLocation, setLoadingLocation] = useState<boolean>(false);
+  const [permissionGranted, setPermissionGranted] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const watcherRef = useRef<Location.LocationSubscription | null>(null);
 
   const reverseGeocode = async (lat: number, lng: number) => {
     try {
-      const places = await Location.reverseGeocodeAsync({
+      // Race geocoding with 1200ms timeout to prevent UI lag
+      const geocodePromise = Location.reverseGeocodeAsync({
         latitude: lat,
         longitude: lng,
       });
+      const timeoutPromise = new Promise<any[]>((_, reject) =>
+        setTimeout(() => reject(new Error('Geocode timeout')), 1200)
+      );
+
+      const places = await Promise.race([geocodePromise, timeoutPromise]);
 
       if (places && places.length > 0) {
         const p = places[0];
@@ -58,9 +84,11 @@ export function useRealtimeLocation(): LocationState {
         return;
       }
     } catch (err) {
-      // Reverse geocoding failed, keep previous or default
+      // Fallback quickly to local area resolver
     }
-    setAddressName(`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`);
+    const resolved = resolveLocalArea(lat, lng);
+    setAddressName(resolved.primary);
+    setSubAddress(resolved.secondary);
   };
 
   const fetchCurrentLocation = async () => {
@@ -79,10 +107,15 @@ export function useRealtimeLocation(): LocationState {
 
       setPermissionGranted(true);
 
-      // Get accurate current position
-      const position = await Location.getCurrentPositionAsync({
+      // Get position with 2500ms timeout
+      const posPromise = Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
+      const timeoutPromise = new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error('GPS timeout')), 2500)
+      );
+
+      const position = await Promise.race([posPromise, timeoutPromise]);
 
       const newCoords = {
         latitude: position.coords.latitude,
@@ -90,12 +123,14 @@ export function useRealtimeLocation(): LocationState {
       };
       setCoords(newCoords);
 
-      // Reverse geocode to human-friendly street / neighborhood
+      // Reverse geocode with timeout
       await reverseGeocode(newCoords.latitude, newCoords.longitude);
     } catch (err: any) {
-      setError(err?.message || 'Failed to get current location');
-      setCoords(DEFAULT_COORDS);
-      setAddressName(DEFAULT_ADDRESS);
+      // Fast fallback to default coords or previous coords without freezing
+      setError(null);
+      const resolved = resolveLocalArea(coords.latitude, coords.longitude);
+      setAddressName(resolved.primary);
+      setSubAddress(resolved.secondary);
     } finally {
       setLoadingLocation(false);
     }
@@ -104,7 +139,12 @@ export function useRealtimeLocation(): LocationState {
   useEffect(() => {
     fetchCurrentLocation();
 
-    // Start background watcher for real-time location tracking
+    // On Web, skip aggressive background watching to prevent constant GPS jitter refetches
+    if (Platform.OS === 'web') {
+      return;
+    }
+
+    // Start background watcher for native mobile device
     let isMounted = true;
     const startWatcher = async () => {
       try {
@@ -113,8 +153,8 @@ export function useRealtimeLocation(): LocationState {
           watcherRef.current = await Location.watchPositionAsync(
             {
               accuracy: Location.Accuracy.Balanced,
-              distanceInterval: 100, // Update if moved > 100 meters
-              timeInterval: 15000, // Or every 15s
+              distanceInterval: 300, // Update only if moved > 300 meters
+              timeInterval: 30000, // Or every 30s
             },
             async (loc) => {
               if (!isMounted) return;

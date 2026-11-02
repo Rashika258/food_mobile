@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -25,6 +25,7 @@ import {
   FALLBACK_HOMEMAKER_ORDERS,
   FALLBACK_MENU,
   FALLBACK_SUBSCRIPTIONS,
+  FALLBACK_KITCHENS,
 } from './src/api';
 import { AuthProvider, useAuth } from './src/AuthContext';
 import { AuthModal } from './src/AuthModal';
@@ -34,6 +35,26 @@ interface CartItem {
   item: MenuItem;
   quantity: number;
 }
+
+// Category filter definitions
+const QUICK_CATEGORIES = [
+  { id: 'ALL', label: 'All Rasois', icon: '🍲' },
+  { id: 'THALIS', label: 'Homestyle Thalis', icon: '🍱', query: 'thali' },
+  { id: 'EXPRESS', label: '15-Min Express', icon: '⚡', query: 'fast' },
+  { id: 'DIET', label: 'Healthy & Diabetic', icon: '🥗', query: 'healthy' },
+  { id: 'BIRYANI', label: 'Clay Dum Biryani', icon: '🥘', query: 'biryani' },
+  { id: 'SOUTH', label: 'South Tiffins', icon: '🥞', query: 'south' },
+  { id: 'GHEE', label: 'Gir Cow Ghee', icon: '🧈', query: 'ghee' },
+  { id: 'DABBA', label: 'Zero Plastic Dabba', icon: '🌱', query: 'homestyle' },
+];
+
+const HOMEMAKER_REELS = [
+  { id: 'r1', name: 'Anita D.', kitchen: 'Ghar Ka Khana', emoji: '👩‍🍳', tag: 'Pure Ghee', specialty: 'Phulkas made fresh on open flame' },
+  { id: 'r2', name: 'Amma M.', kitchen: "Amma's Rasoi", emoji: '👵', tag: 'Stone Ground', specialty: 'Gunpowder Podi & Soft Idlis' },
+  { id: 'r3', name: 'Tariq K.', kitchen: 'Royal Durbar', emoji: '👨‍🍳', tag: 'Clay Handi', specialty: 'Slow dum cooked saffron rice' },
+  { id: 'r4', name: 'Suman L.', kitchen: 'Pahadi Kitchen', emoji: '🥘', tag: 'Cast Iron', specialty: 'Zero preservative homestyle dal' },
+  { id: 'r5', name: 'Bhavna B.', kitchen: 'Kathiyawadi Dabba', emoji: '👩‍🍳', tag: 'Cold Pressed', specialty: 'Ringna No Oro & Bajra Rotla' },
+];
 
 function FoodAppMain() {
   const { user, token } = useAuth();
@@ -48,12 +69,14 @@ function FoodAppMain() {
     permissionGranted,
     refreshLocation,
   } = useRealtimeLocation();
-  // Mode: CUSTOMER or HOMEMAKER
-  const [appMode, setAppMode] = useState<'CUSTOMER' | 'HOMEMAKER'>('CUSTOMER');
+
+  // Bottom Navigation Bar Tab: HOME | EXPLORE | TIFFINS | ORDERS | STUDIO
+  const [activeBottomTab, setActiveBottomTab] = useState<'HOME' | 'EXPLORE' | 'TIFFINS' | 'ORDERS' | 'STUDIO'>('HOME');
 
   // Customer State
-  const [activeTab, setActiveTab] = useState<'HOME_KITCHEN' | 'RESTAURANT'>('HOME_KITCHEN');
+  const [activeMarketplaceTab, setActiveMarketplaceTab] = useState<'HOME_KITCHEN' | 'RESTAURANT'>('HOME_KITCHEN');
   const [radiusKm, setRadiusKm] = useState<number>(5);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [kitchens, setKitchens] = useState<Kitchen[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
@@ -79,9 +102,21 @@ function FoodAppMain() {
   const [cookingFat, setCookingFat] = useState<'COLD_PRESSED' | 'GIR_GHEE' | 'LOW_OIL'>('COLD_PRESSED');
   const [rotiChoice, setRotiChoice] = useState<'PHULKAS' | 'BHAKRI' | 'MULTIGRAIN'>('PHULKAS');
   const [chefCustomNote, setChefCustomNote] = useState<string>('');
+  const [elderCareGift, setElderCareGift] = useState<boolean>(false);
 
   // Active Order Tracking
-  const [activeOrder, setActiveOrder] = useState<any>(null);
+  const [activeOrder, setActiveOrder] = useState<any>({
+    id: 'ord_active',
+    orderNumber: 'FD-892401',
+    kitchenName: "Anita's Ghar Ka Khana",
+    itemsSummary: '2x Special Ghar Ki Thali (4 Phulkas + Paneer)',
+    totalAmount: 325,
+    deliveryOtp: '4829',
+    status: 'COOKING', // PLACED -> COOKING -> ON_WAY -> DELIVERED
+    slot: 'Instant Delivery • 15 Mins',
+    riderName: 'Ramesh K. (EV Rider)',
+    dabbaType: '3-Tier Stainless Steel Dabba (Plastic-Free)',
+  });
   const [trackingModalVisible, setTrackingModalVisible] = useState<boolean>(false);
 
   // Homemaker Studio State
@@ -91,7 +126,7 @@ function FoodAppMain() {
 
   useEffect(() => {
     loadKitchens();
-  }, [activeTab, radiusKm, coords.latitude, coords.longitude]);
+  }, [activeMarketplaceTab, radiusKm, coords.latitude, coords.longitude]);
 
   const loadKitchens = async () => {
     setLoading(true);
@@ -99,9 +134,9 @@ function FoodAppMain() {
       coords.latitude,
       coords.longitude,
       radiusKm,
-      activeTab
+      activeMarketplaceTab
     );
-    setKitchens(data);
+    setKitchens(data && data.length > 0 ? data : FALLBACK_KITCHENS);
     setLoading(false);
   };
 
@@ -113,7 +148,7 @@ function FoodAppMain() {
       coords.latitude,
       coords.longitude
     );
-    setKitchenMenuItems(details.menuItems || FALLBACK_MENU[kitchen.id] || FALLBACK_MENU['k1']);
+    setKitchenMenuItems(details.menuItems || FALLBACK_MENU[kitchen.id] || FALLBACK_MENU['k1'] || []);
     setKitchenPlans(details.subscriptionPlans || FALLBACK_SUBSCRIPTIONS.filter((s) => s.kitchenId === kitchen.id));
     setMenuModalVisible(true);
   };
@@ -149,7 +184,7 @@ function FoodAppMain() {
 
   const totalCartCount = cart.reduce((acc, ci) => acc + ci.quantity, 0);
   const cartSubtotal = cart.reduce((acc, ci) => acc + ci.item.price * ci.quantity, 0);
-  const deliveryFee = (isCommunityPoolActive || activeTab === 'HOME_KITCHEN') ? 0 : 35;
+  const deliveryFee = (isCommunityPoolActive || activeMarketplaceTab === 'HOME_KITCHEN') ? 0 : 35;
   const platformFee = 5;
   const grandTotal = cartSubtotal > 0 ? cartSubtotal + deliveryFee + platformFee : 0;
 
@@ -159,7 +194,7 @@ function FoodAppMain() {
     if (!user) {
       Alert.alert(
         'Sign In Required',
-        'Please sign in or select a demo account before placing your order.',
+        'Please sign in or choose a demo persona to place your order.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Sign In', onPress: () => setAuthModalVisible(true) },
@@ -174,7 +209,7 @@ function FoodAppMain() {
         ? `${user.addresses[0].addressLine}, ${user.addresses[0].city}`
         : `${addressName}${subAddress ? ' (' + subAddress + ')' : ''}`;
 
-    const customInstructions = `Spice: ${spiceLevel}, Fat: ${cookingFat}, Roti: ${rotiChoice}${chefCustomNote ? ` | ${chefCustomNote}` : ''}`;
+    const customInstructions = `Spice: ${spiceLevel}, Fat: ${cookingFat}, Roti: ${rotiChoice}${chefCustomNote ? ` | ${chefCustomNote}` : ''}${elderCareGift ? ' | 👵 Care For Elders Gift Tag' : ''}`;
 
     const payload = {
       kitchenId: selectedKitchen?.id || 'k1',
@@ -204,18 +239,22 @@ function FoodAppMain() {
     setIsPlacingOrder(false);
     setCartModalVisible(false);
     setMenuModalVisible(false);
+    const orderedItemsSummary = cart.map(c => `${c.quantity}x ${c.item.name}`).join(', ');
     setCart([]);
 
     setActiveOrder({
-      id: res.data?.id || 'ord_101',
-      orderNumber: res.data?.orderNumber || 'FD-892401',
-      totalAmount: grandTotal,
-      deliveryOtp: res.data?.deliveryOtp || '4829',
-      status: 'PREPARING',
+      id: res.data?.id || `ord_${Date.now()}`,
+      orderNumber: res.data?.orderNumber || `FD-${Math.floor(100000 + Math.random() * 900000)}`,
       kitchenName: selectedKitchen?.name || "Anita's Ghar Ka Khana",
-      slot: deliverySlot === 'INSTANT' ? 'Instant 15-20 Mins' : 'Pre-order Slot',
+      itemsSummary: orderedItemsSummary,
+      totalAmount: grandTotal,
+      deliveryOtp: res.data?.deliveryOtp || `${Math.floor(1000 + Math.random() * 9000)}`,
+      status: 'COOKING',
+      slot: deliverySlot === 'INSTANT' ? 'Instant Delivery • 15 Mins' : 'Scheduled Slot',
+      riderName: 'Ramesh K. (Neighborhood EV Rider)',
+      dabbaType: '3-Tier Stainless Steel Dabba (Plastic-Free)',
     });
-    setTrackingModalVisible(true);
+    setActiveBottomTab('ORDERS');
   };
 
   // Homemaker Operations
@@ -236,674 +275,1038 @@ function FoodAppMain() {
     setHomemakerOrders((prev) =>
       prev.map((ord) => (ord.id === orderId ? { ...ord, status: 'READY_FOR_PICKUP' } : ord))
     );
-    Alert.alert('Rider Notified!', 'Order marked ready. Neighborhood rider Ramesh has been summoned for pickup.');
+    Alert.alert('Rider Summoned!', 'Order is packed in sanitized steel dabba. Neighborhood rider Ramesh has been summoned for doorstep pickup.');
   };
 
-  const filteredKitchens = kitchens.filter(
-    (k) =>
-      k.name.toLowerCase().includes(search.toLowerCase()) ||
-      k.cuisines.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filtered Kitchens logic
+  const filteredKitchens = useMemo(() => {
+    return kitchens.filter((k) => {
+      const matchSearch =
+        k.name.toLowerCase().includes(search.toLowerCase()) ||
+        k.cuisines.toLowerCase().includes(search.toLowerCase()) ||
+        (k.storyText && k.storyText.toLowerCase().includes(search.toLowerCase()));
+
+      if (!matchSearch) return false;
+
+      if (selectedCategory === 'ALL') return true;
+      const cat = QUICK_CATEGORIES.find((c) => c.id === selectedCategory);
+      if (cat?.query) {
+        return (
+          k.cuisines.toLowerCase().includes(cat.query) ||
+          k.name.toLowerCase().includes(cat.query) ||
+          (k.description && k.description.toLowerCase().includes(cat.query))
+        );
+      }
+      return true;
+    });
+  }, [kitchens, search, selectedCategory]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+    <SafeAreaView style={styles.safeContainer}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFBF5" />
 
-      {/* Top Universal App Bar */}
-      <View style={styles.topBar}>
-        <View style={styles.logoRow}>
-          <Text style={styles.appTitle}>🍲 FoodApp</Text>
-          <View style={styles.badgeHub}>
-            <Text style={styles.badgeHubText}>HYPER-LOCAL</Text>
+      {/* ===================== TOP HEADER APP BAR ===================== */}
+      <View style={styles.brandAppBar}>
+        <View style={styles.brandLeft}>
+          {/* Logo Mark */}
+          <View style={styles.brandIconWrapper}>
+            <Text style={styles.brandIcon}>🍲</Text>
+          </View>
+          <View>
+            <View style={styles.brandTitleRow}>
+              <Text style={styles.brandTitle}>RasoiHub</Text>
+              <View style={styles.artisanalBadge}>
+                <Text style={styles.artisanalBadgeText}>HOMEMADE</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.locationPillRow}
+              onPress={refreshLocation}
+              activeOpacity={0.7}
+            >
+              <View style={styles.pulseDot} />
+              <Text style={styles.locationMainText} numberOfLines={1}>
+                {loadingLocation ? 'Locating...' : addressName}
+              </Text>
+              <Text style={styles.locationDropdownArrow}>▾</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.topBarRight}>
-          {/* User Profile / Auth Button */}
+        {/* Right Action Icons: Profile Avatar & Dabba / Cart Indicator */}
+        <View style={styles.brandRight}>
           <TouchableOpacity
-            style={styles.authTopBarBtn}
+            style={styles.profileAvatarBtn}
             onPress={() => setAuthModalVisible(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.authTopBarText}>
-              {user ? `👤 ${user.name.split(' ')[0]}` : '🔑 Sign In'}
-            </Text>
+            {user ? (
+              <View style={styles.userInitialsBadge}>
+                <Text style={styles.userInitialsText}>{user.name.charAt(0).toUpperCase()}</Text>
+              </View>
+            ) : (
+              <Text style={styles.profileIconPlaceholder}>👤</Text>
+            )}
           </TouchableOpacity>
 
-          {/* Mode Switcher Pill */}
           <TouchableOpacity
-            style={[styles.modeSwitchBtn, appMode === 'HOMEMAKER' && styles.modeSwitchHomemaker]}
-            onPress={() => setAppMode(appMode === 'CUSTOMER' ? 'HOMEMAKER' : 'CUSTOMER')}
-            activeOpacity={0.85}
+            style={styles.cartHeaderBtn}
+            onPress={() => setCartModalVisible(true)}
+            activeOpacity={0.8}
           >
-            <Text style={[styles.modeSwitchText, appMode === 'HOMEMAKER' && styles.modeSwitchTextLight]}>
-              {appMode === 'CUSTOMER' ? '👩‍🍳 Cook Studio' : '🛍️ Order Food'}
-            </Text>
+            <Text style={styles.cartHeaderEmoji}>🛍️</Text>
+            {totalCartCount > 0 && (
+              <View style={styles.cartHeaderCounter}>
+                <Text style={styles.cartHeaderCounterText}>{totalCartCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ===================== HOMEMAKER STUDIO MODE ===================== */}
-      {appMode === 'HOMEMAKER' ? (
-        <ScrollView style={styles.studioContainer} showsVerticalScrollIndicator={false}>
-          {/* Chef Profile Banner */}
-          <View style={styles.studioCard}>
-            <View style={styles.studioHeaderRow}>
-              <View>
-                <Text style={styles.studioChefName}>Anita Deshmukh 👩‍🍳</Text>
-                <Text style={styles.studioKitchenTitle}>Anita&apos;s Ghar Ka Khana • Bellandur</Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.statusToggle, isKitchenOpen ? styles.statusOpen : styles.statusClosed]}
-                onPress={() => setIsKitchenOpen(!isKitchenOpen)}
-              >
-                <Text style={styles.statusToggleText}>
-                  {isKitchenOpen ? '🟢 OPEN FOR ORDERS' : '🔴 CLOSED'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.statGrid}>
-              <View style={styles.statBox}>
-                <Text style={styles.statNumber}>₹2,520</Text>
-                <Text style={styles.statLabel}>Today&apos;s Net Payout</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statNumber}>10%</Text>
-                <Text style={styles.statLabel}>Platform Fee (Fair)</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statNumber}>7</Text>
-                <Text style={styles.statLabel}>Daily Tiffin Subs</Text>
-              </View>
-            </View>
-
-            {/* Instant Daily UPI Withdrawal */}
-            <TouchableOpacity
-              style={{
-                marginTop: 12,
-                backgroundColor: '#ECFDF5',
-                borderWidth: 1,
-                borderColor: '#A7F3D0',
-                borderRadius: 12,
-                padding: 10,
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-              onPress={() => {
-                Alert.alert(
-                  '⚡ UPI Instant Settlement',
-                  '₹2,520 transferred directly to anita@okhdfcbank!\nReference: UPI-984210\nZero deduction fee.'
-                );
-              }}
-            >
-              <View>
-                <Text style={{ fontSize: 11, fontWeight: '900', color: '#065F46' }}>
-                  ⚡ Instant UPI Transfer Available
-                </Text>
-                <Text style={{ fontSize: 9, color: '#047857' }}>
-                  Withdraw ₹2,520 to anita@okhdfcbank now
-                </Text>
-              </View>
-              <View style={{ backgroundColor: '#059669', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 }}>
-                <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>Withdraw Now →</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* Live Kitchen Cooking Board */}
-          <View style={styles.sectionHeadingRow}>
-            <Text style={styles.sectionTitle}>🔥 Live Cooking Queue ({homemakerOrders.length})</Text>
-            <Text style={styles.sectionSubtitle}>Bellandur Neighborhood</Text>
-          </View>
-
-          {homemakerOrders.map((ord) => (
-            <View key={ord.id} style={styles.orderCard}>
-              <View style={styles.orderCardTop}>
-                <View>
-                  <Text style={styles.orderNumber}>{ord.orderNumber}</Text>
-                  <Text style={styles.orderCustomer}>{ord.customerName}</Text>
-                </View>
-                <View style={[styles.statusPill, ord.status === 'READY_FOR_PICKUP' ? styles.statusReady : styles.statusPrep]}>
-                  <Text style={styles.statusPillText}>{ord.status.replace('_', ' ')}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.orderItems}>{ord.items}</Text>
-              <View style={styles.orderFooter}>
-                <Text style={styles.orderAmount}>₹{ord.totalAmount} • {ord.slot}</Text>
-                {ord.status === 'PREPARING' ? (
-                  <TouchableOpacity
-                    style={styles.readyBtn}
-                    onPress={() => markOrderReady(ord.id)}
-                  >
-                    <Text style={styles.readyBtnText}>✓ Ready for Pickup</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.otpPill}>
-                    <Text style={styles.otpPillText}>OTP: {ord.deliveryOtp}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          ))}
-
-          {/* Aaj Ka Menu & Small Batch Limiter */}
-          <View style={[styles.sectionHeadingRow, { marginTop: 10 }]}>
-            <Text style={styles.sectionTitle}>🍱 Aaj Ka Menu & Batch Portions</Text>
-            <Text style={styles.sectionSubtitle}>Prevent cooking fatigue</Text>
-          </View>
-
-          {homemakerMenu.map((item) => (
-            <View key={item.id} style={styles.menuBatchCard}>
-              <View style={styles.menuBatchInfo}>
-                <Text style={styles.menuBatchName}>{item.name}</Text>
-                <Text style={styles.menuBatchPrice}>₹{item.price} • Max {item.dailyStockLimit} portions</Text>
-                <View style={styles.portionCountRow}>
-                  <Text style={styles.portionCountLabel}>Portions Left:</Text>
-                  <Text style={[styles.portionCountValue, (item.portionsRemaining || 0) < 5 && styles.textRed]}>
-                    {item.portionsRemaining} / {item.dailyStockLimit}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.stepperCol}>
-                <View style={styles.stepperRow}>
-                  <TouchableOpacity
-                    style={styles.portionBtn}
-                    onPress={() => adjustPortion(item.id, -1)}
-                  >
-                    <Text style={styles.portionBtnText}>-1</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.portionBtn, styles.portionBtnAdd]}
-                    onPress={() => adjustPortion(item.id, 5)}
-                  >
-                    <Text style={[styles.portionBtnText, styles.textWhite]}>+5</Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity
-                  style={styles.soldOutBtn}
-                  onPress={() => adjustPortion(item.id, -(item.portionsRemaining || 0))}
-                >
-                  <Text style={styles.soldOutText}>Sold Out</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-
-          <View style={{ height: 60 }} />
-        </ScrollView>
-      ) : (
-        /* ===================== CUSTOMER MARKETPLACE MODE ===================== */
-        <View style={{ flex: 1 }}>
-          {/* Header & Real-Time Location */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View style={styles.deliveringLabelRow}>
-                <Text style={styles.locationLabel}>DELIVERING TO</Text>
-                {permissionGranted && (
-                  <View style={styles.liveGpsBadge}>
-                    <View style={styles.pulseDot} />
-                    <Text style={styles.liveGpsText}>LIVE GPS</Text>
-                  </View>
-                )}
-              </View>
-
-              <TouchableOpacity
-                style={styles.locationRow}
-                onPress={refreshLocation}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.locationPin}>📍</Text>
-                <View style={{ flex: 1, paddingRight: 4 }}>
-                  <Text style={styles.locationText} numberOfLines={1}>
-                    {loadingLocation ? 'Fetching device location...' : addressName}
-                  </Text>
-                  {subAddress ? (
-                    <Text style={styles.subAddressText} numberOfLines={1}>
-                      {subAddress}
-                    </Text>
-                  ) : null}
-                </View>
-
-                <View style={styles.radiusPill}>
-                  <Text style={styles.radiusPillText}>{radiusKm} KM</Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.gpsRefreshBtn}
-                  onPress={refreshLocation}
-                  disabled={loadingLocation}
-                  activeOpacity={0.7}
-                >
-                  {loadingLocation ? (
-                    <ActivityIndicator size="small" color="#EA580C" />
-                  ) : (
-                    <Text style={styles.gpsRefreshIcon}>🔄</Text>
-                  )}
-                </TouchableOpacity>
-              </TouchableOpacity>
-            </View>
-
-            {/* Header Right: Account Profile Avatar & Cart */}
-            <View style={styles.headerRight}>
-              <TouchableOpacity
-                style={styles.userProfileBtn}
-                onPress={() => setAuthModalVisible(true)}
-                activeOpacity={0.8}
-              >
-                {user ? (
-                  <View style={styles.userAvatarSm}>
-                    <Text style={styles.userAvatarSmText}>
-                      {user.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                ) : (
-                  <Text style={styles.userIconSm}>👤</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.cartBtn}
-                onPress={() => setCartModalVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.cartIcon}>🛍️</Text>
-                {totalCartCount > 0 && (
-                  <View style={styles.cartCountBadge}>
-                    <Text style={styles.cartCountBadgeText}>{totalCartCount}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Search Input */}
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBar}>
-              <Text style={styles.searchIcon}>🔍</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search home thalis, biryani, dabba..."
-                placeholderTextColor="#94A3B8"
-                value={search}
-                onChangeText={setSearch}
-              />
-              {search ? (
-                <TouchableOpacity onPress={() => setSearch('')}>
-                  <Text style={styles.clearSearch}>✕</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </View>
-
-          {/* 15s Kitchen Stories Reels Bar */}
-          <View style={{ backgroundColor: '#FFFFFF', paddingHorizontal: 16, paddingBottom: 10 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Text style={{ fontSize: 10 }}>🔴</Text>
-                <Text style={{ fontSize: 11, fontWeight: '900', color: '#0F172A', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  15s Cook Stories &amp; Prep
-                </Text>
-              </View>
-              <Text style={{ fontSize: 10, fontWeight: '800', color: '#EA580C' }}>Tap to view</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-              {[
-                { name: 'Anita D.', kitchen: 'Ghar Ka Khana', emoji: '👩‍🍳', tag: 'Pure Ghee' },
-                { name: 'Amma M.', kitchen: 'South Kitchen', emoji: '👵', tag: 'Stone Ground' },
-                { name: 'Tariq K.', kitchen: 'Royal Biryani', emoji: '👨‍🍳', tag: 'Clay Dum' },
-                { name: 'Suman L.', kitchen: 'Pahadi Rasoi', emoji: '🥘', tag: 'Cast Iron' },
-              ].map((s, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  onPress={() => {
-                    Alert.alert(
-                      `📹 ${s.name} • ${s.kitchen}`,
-                      `"Cooking fresh in 100% cold-pressed groundnut oil. Phulkas made by hand directly over the flame."\n\nFeatured Dish: Daily Special Thali (₹160)\nTag: ${s.tag}`
-                    );
-                  }}
-                  style={{ alignItems: 'center', width: 62 }}
-                >
-                  <View style={{ width: 52, height: 52, borderRadius: 26, borderWidth: 2.5, borderColor: '#EA580C', padding: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF7ED' }}>
-                    <Text style={{ fontSize: 24 }}>{s.emoji}</Text>
-                  </View>
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#0F172A', marginTop: 3 }} numberOfLines={1}>
-                    {s.name}
-                  </Text>
-                  <Text style={{ fontSize: 8, color: '#EA580C', fontWeight: '700' }} numberOfLines={1}>
-                    {s.tag}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* AI Health Diet Protocol Chips */}
+      {/* ===================== MAIN SCREEN CONTENT BY ACTIVE TAB ===================== */}
+      <View style={styles.screenBody}>
+        {/* ===================== TAB 1: HOME FEED ===================== */}
+        {activeBottomTab === 'HOME' && (
           <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{ backgroundColor: '#F8FAFC', paddingVertical: 8, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' }}
-            contentContainerStyle={{ gap: 6 }}
+            style={styles.mainFeedScroll}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.mainFeedContent}
           >
-            {[
-              { id: '', label: 'All Menus' },
-              { id: 'diabetic', label: '🩺 Diabetic Low-GI' },
-              { id: 'heart', label: '🫀 Heart Low-Sodium' },
-              { id: 'protein', label: '💪 35g+ Veg Protein' },
-              { id: 'pcos', label: '🥑 PCOS Balance' },
-            ].map((chip) => (
-              <TouchableOpacity
-                key={chip.id}
-                onPress={() => setSearch(chip.id ? chip.label.split(' ')[1] : '')}
-                style={{
-                  backgroundColor: search.toLowerCase().includes(chip.id) && chip.id ? '#0F766E' : '#FFFFFF',
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  borderColor: search.toLowerCase().includes(chip.id) && chip.id ? '#0F766E' : '#CBD5E1',
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 10,
-                    fontWeight: '800',
-                    color: search.toLowerCase().includes(chip.id) && chip.id ? '#FFFFFF' : '#334155',
-                  }}
-                >
-                  {chip.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+            {/* Search Bar with Micro-Filter */}
+            <View style={styles.searchBarWrapper}>
+              <View style={styles.searchBarInputContainer}>
+                <Text style={styles.searchMagnifierIcon}>🔍</Text>
+                <TextInput
+                  style={styles.searchTextInput}
+                  placeholder="Search home rasois, dabbas, regional thalis..."
+                  placeholderTextColor="#94A3B8"
+                  value={search}
+                  onChangeText={setSearch}
+                />
+                {search.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearch('')}>
+                    <Text style={styles.searchClearBtn}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
 
-          {/* Dual Marketplace Toggle */}
-          <View style={styles.tabContainer}>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'HOME_KITCHEN' && styles.activeTab]}
-              onPress={() => setActiveTab('HOME_KITCHEN')}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === 'HOME_KITCHEN' && styles.activeTabText,
-                ]}
-              >
-                🏡 Homemakers (≤ {radiusKm} KM)
-              </Text>
-            </TouchableOpacity>
+            {/* 15-Second Homemaker Stories Reel */}
+            <View style={styles.storiesContainer}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={styles.flexRowCenter}>
+                  <Text style={styles.liveRedDot}>🔴</Text>
+                  <Text style={styles.sectionHeaderTitle}>15s Live Cook Stories</Text>
+                </View>
+                <Text style={styles.sectionHeaderSubAction}>Watch Prep</Text>
+              </View>
 
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'RESTAURANT' && styles.activeTab]}
-              onPress={() => setActiveTab('RESTAURANT')}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === 'RESTAURANT' && styles.activeTabText,
-                ]}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.storiesScrollContent}
               >
-                🍽️ Restaurants
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Radius Switcher for Home Makers */}
-          {activeTab === 'HOME_KITCHEN' && (
-            <View style={styles.radiusSelector}>
-              <Text style={styles.radiusSelectorLabel}>Neighborhood Radius:</Text>
-              <View style={styles.radiusButtons}>
-                {[3, 5, 10].map((r) => (
+                {HOMEMAKER_REELS.map((reel) => (
                   <TouchableOpacity
-                    key={r}
-                    style={[
-                      styles.radiusBtn,
-                      radiusKm === r && styles.radiusBtnActive,
-                    ]}
-                    onPress={() => setRadiusKm(r)}
-                    activeOpacity={0.7}
+                    key={reel.id}
+                    style={styles.storyBubble}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      Alert.alert(
+                        `📹 ${reel.name} • ${reel.kitchen}`,
+                        `"${reel.specialty}"\n\n✨ Tag: ${reel.tag}\n🥘 Authentic family recipe crafted in fresh daily small batches.`
+                      );
+                    }}
                   >
-                    <Text
-                      style={[
-                        styles.radiusBtnText,
-                        radiusKm === r && styles.radiusBtnTextActive,
-                      ]}
-                    >
-                      {r} KM
+                    <View style={styles.storyRingWrapper}>
+                      <View style={styles.storyInnerCircle}>
+                        <Text style={styles.storyEmoji}>{reel.emoji}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.storyChefName} numberOfLines={1}>
+                      {reel.name}
                     </Text>
+                    <View style={styles.storyTagBadge}>
+                      <Text style={styles.storyTagText} numberOfLines={1}>
+                        {reel.tag}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
             </View>
-          )}
 
-          {/* Food Listings */}
-          <ScrollView
-            contentContainerStyle={styles.scrollList}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Banner for Differentiators */}
-            {activeTab === 'HOME_KITCHEN' && (
-              <View style={styles.promoBanner}>
-                <View style={styles.promoHeader}>
-                  <Text style={styles.promoTag}>✨ GHARKAKHANA ADVANTAGE</Text>
+            {/* Interactive Category & Quick-Filter Carousel */}
+            <View style={styles.categoryCarouselWrapper}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryScrollContent}
+              >
+                {QUICK_CATEGORIES.map((cat) => {
+                  const isActive = selectedCategory === cat.id;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.categoryPill,
+                        isActive && styles.categoryPillActive,
+                      ]}
+                      onPress={() => setSelectedCategory(cat.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.categoryPillIcon}>{cat.icon}</Text>
+                      <Text
+                        style={[
+                          styles.categoryPillLabel,
+                          isActive && styles.categoryPillLabelActive,
+                        ]}
+                      >
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Differentiator Banner: Zero Plastic Dabba & Society Pooling */}
+            <View style={styles.sustainabilityHeroBanner}>
+              <View style={styles.bannerBadgeRow}>
+                <View style={styles.bannerTagGreen}>
+                  <Text style={styles.bannerTagGreenText}>🌱 100% ZERO-PLASTIC</Text>
                 </View>
-                <Text style={styles.promoTitle}>Pure Homestyle • Zero Plastic Dabbas</Text>
-                <Text style={styles.promoDesc}>
-                  Cooked fresh in 10-15 portion small batches by verified home makers in your neighborhood.
-                </Text>
+                <View style={styles.bannerTagAmber}>
+                  <Text style={styles.bannerTagAmberText}>⚡ MAX 15 PORTIONS/BATCH</Text>
+                </View>
               </View>
-            )}
+              <Text style={styles.sustainabilityHeroTitle}>
+                Real Home Food, Delivered in Returnable Steel Dabbas
+              </Text>
+              <Text style={styles.sustainabilityHeroSubtitle}>
+                No dark kitchens. No commercial hydrogenated fats. Pure homestyle taste crafted by verified homemakers in your society radius.
+              </Text>
+
+              {/* Society Pooling Mini-Indicator */}
+              <TouchableOpacity
+                style={styles.societyPoolStrip}
+                onPress={() => setCartModalVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.societyPoolIcon}>🏢</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.societyPoolText}>
+                    Free Neighborhood Drop: <Text style={{ fontWeight: '900' }}>{selectedSociety}</Text>
+                  </Text>
+                  <Text style={styles.societyPoolSub}>Pooling with 6 neighboring apartments saves delivery charges</Text>
+                </View>
+                <Text style={styles.societyPoolArrow}>→</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Marketplace Dual Mode Switcher: Homemakers vs Cloud Kitchens */}
+            <View style={styles.marketplaceSwitchContainer}>
+              <View style={styles.marketplaceSwitchBar}>
+                <TouchableOpacity
+                  style={[
+                    styles.marketplaceSwitchTab,
+                    activeMarketplaceTab === 'HOME_KITCHEN' && styles.marketplaceSwitchTabActive,
+                  ]}
+                  onPress={() => setActiveMarketplaceTab('HOME_KITCHEN')}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.marketplaceSwitchText,
+                      activeMarketplaceTab === 'HOME_KITCHEN' && styles.marketplaceSwitchTextActive,
+                    ]}
+                  >
+                    🏡 Homemakers (≤ {radiusKm} km)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.marketplaceSwitchTab,
+                    activeMarketplaceTab === 'RESTAURANT' && styles.marketplaceSwitchTabActive,
+                  ]}
+                  onPress={() => setActiveMarketplaceTab('RESTAURANT')}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.marketplaceSwitchText,
+                      activeMarketplaceTab === 'RESTAURANT' && styles.marketplaceSwitchTextActive,
+                    ]}
+                  >
+                    🍽️ Dining &amp; Cloud
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Radius Filter Pills */}
+              {activeMarketplaceTab === 'HOME_KITCHEN' && (
+                <View style={styles.radiusPillRow}>
+                  <Text style={styles.radiusLabel}>Neighborhood Distance:</Text>
+                  <View style={styles.radiusButtonsGroup}>
+                    {[3, 5, 10].map((km) => (
+                      <TouchableOpacity
+                        key={km}
+                        style={[
+                          styles.radiusChip,
+                          radiusKm === km && styles.radiusChipActive,
+                        ]}
+                        onPress={() => setRadiusKm(km)}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.radiusChipText,
+                            radiusKm === km && styles.radiusChipTextActive,
+                          ]}
+                        >
+                          {km} KM
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+
+            {/* Kitchen Listing Feed */}
+            <View style={styles.kitchensFeedHeader}>
+              <Text style={styles.feedHeadingTitle}>
+                {activeMarketplaceTab === 'HOME_KITCHEN' ? 'Verified Home Rasois Nearby' : 'Popular Dining Kitchens'}
+              </Text>
+              <Text style={styles.feedHeadingCount}>{filteredKitchens.length} available</Text>
+            </View>
 
             {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#FF5200" />
-                <Text style={styles.loadingText}>Finding nearby kitchens...</Text>
+              <View style={styles.loaderCenter}>
+                <ActivityIndicator size="large" color="#E05326" />
+                <Text style={styles.loaderText}>Discovering fresh neighborhood pots...</Text>
               </View>
             ) : filteredKitchens.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>🏡</Text>
-                <Text style={styles.emptyTitle}>No kitchens found within {radiusKm} KM</Text>
-                <Text style={styles.emptySub}>
-                  Try expanding your distance to 10 KM or clearing search filters.
+              <View style={styles.emptyResultsCard}>
+                <Text style={styles.emptyResultsEmoji}>🍲</Text>
+                <Text style={styles.emptyResultsTitle}>No kitchens matching current filters</Text>
+                <Text style={styles.emptyResultsSubtitle}>
+                  Try expanding the neighborhood distance to 10 km or selecting &quot;All Rasois&quot;.
                 </Text>
                 <TouchableOpacity
-                  style={styles.expandBtn}
-                  onPress={() => setRadiusKm(10)}
+                  style={styles.expandRadiusBtn}
+                  onPress={() => {
+                    setRadiusKm(10);
+                    setSelectedCategory('ALL');
+                    setSearch('');
+                  }}
                 >
-                  <Text style={styles.expandBtnText}>Expand to 10 KM</Text>
+                  <Text style={styles.expandRadiusBtnText}>Reset Filters &amp; Expand Radius</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              filteredKitchens.map((k) => (
+              filteredKitchens.map((kitchen) => (
                 <TouchableOpacity
-                  key={k.id}
-                  style={styles.card}
+                  key={kitchen.id}
+                  style={styles.artisanalKitchenCard}
                   activeOpacity={0.92}
-                  onPress={() => handleOpenKitchen(k)}
+                  onPress={() => handleOpenKitchen(kitchen)}
                 >
-                  <View style={styles.imageContainer}>
+                  {/* Card Cover Media */}
+                  <View style={styles.cardMediaContainer}>
                     <Image
                       source={{
                         uri:
-                          k.coverImage ||
+                          kitchen.coverImage ||
                           'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=600&auto=format&fit=crop&q=80',
                       }}
-                      style={styles.cardImage}
+                      style={styles.cardCoverImage}
                     />
-                    <View style={styles.imageOverlay} />
+                    <View style={styles.cardGradientOverlay} />
 
                     {/* Floating Badges */}
-                    <View style={styles.badgeRow}>
-                      {k.distanceKm !== null && k.distanceKm !== undefined && (
-                        <View style={styles.distanceBadge}>
-                          <Text style={styles.distanceText}>📍 {k.distanceKm} km</Text>
-                        </View>
-                      )}
-                      <View style={styles.prepBadge}>
-                        <Text style={styles.prepText}>
-                          ⚡ {k.estimatedDeliveryMins || k.orderLeadTimeMinutes}m
+                    <View style={styles.cardTopBadgeRow}>
+                      <View style={styles.batchNoticeBadge}>
+                        <Text style={styles.batchNoticeText}>
+                          {kitchen.type === 'HOME_KITCHEN' ? '🔥 Small Batch • Fresh Daily' : '⚡ Rapid Kitchen'}
                         </Text>
+                      </View>
+                      <View style={styles.distanceBadge}>
+                        <Text style={styles.distanceBadgeText}>📍 {kitchen.distanceKm || 0.8} km</Text>
+                      </View>
+                    </View>
+
+                    {/* Delivery & Hygiene Strip */}
+                    <View style={styles.cardBottomMediaStrip}>
+                      <View style={styles.timeBadge}>
+                        <Text style={styles.timeBadgeText}>
+                          ⏱️ {kitchen.estimatedDeliveryMins || kitchen.orderLeadTimeMinutes || 20} mins
+                        </Text>
+                      </View>
+                      <View style={styles.hygieneBadge}>
+                        <Text style={styles.hygieneBadgeText}>🛡️ {kitchen.hygieneScore || 98}% Hygiene Score</Text>
                       </View>
                     </View>
                   </View>
 
-                  <View style={styles.cardBody}>
-                    <View style={styles.cardTitleRow}>
-                      <Text style={styles.kitchenName} numberOfLines={1}>
-                        {k.name}
+                  {/* Card Body Info */}
+                  <View style={styles.cardContentBody}>
+                    <View style={styles.kitchenNameRow}>
+                      <Text style={styles.kitchenNameTitle} numberOfLines={1}>
+                        {kitchen.name}
                       </Text>
-                      <View style={styles.ratingBadge}>
-                        <Text style={styles.ratingText}>★ {k.rating?.toFixed(1) || '4.8'}</Text>
+                      <View style={styles.ratingPill}>
+                        <Text style={styles.ratingPillText}>★ {kitchen.rating?.toFixed(1) || '4.9'}</Text>
                       </View>
                     </View>
 
-                    <Text style={styles.cuisines} numberOfLines={1}>
-                      {k.cuisines}
+                    <Text style={styles.kitchenCuisinesSubtitle} numberOfLines={1}>
+                      {kitchen.cuisines}
                     </Text>
 
-                    {k.storyText ? (
-                      <View style={styles.storyBox}>
-                        <Text style={styles.storyLabel}>👩‍🍳 Cook&apos;s Story</Text>
-                        <Text style={styles.storyText} numberOfLines={2}>
-                          &quot;{k.storyText}&quot;
+                    {/* Authentic Story Quote if available */}
+                    {kitchen.storyText && (
+                      <View style={styles.chefStoryQuoteBox}>
+                        <Text style={styles.chefStoryQuoteEmoji}>👩‍🍳</Text>
+                        <Text style={styles.chefStoryQuoteText} numberOfLines={2}>
+                          &quot;{kitchen.storyText}&quot;
                         </Text>
                       </View>
-                    ) : null}
+                    )}
 
-                    <View style={styles.cardFooter}>
-                      <Text style={styles.priceText}>
-                        ₹{k.priceForTwo} <Text style={styles.priceSub}>for two</Text>
-                      </Text>
-                      <View style={styles.actionPill}>
-                        <Text style={styles.actionPillText}>View Menu & Tiffins →</Text>
+                    {/* Price and CTA */}
+                    <View style={styles.cardFooterActionRow}>
+                      <View>
+                        <Text style={styles.priceForTwoLabel}>Avg. Cost</Text>
+                        <Text style={styles.priceForTwoValue}>
+                          ₹{kitchen.priceForTwo}{' '}
+                          <Text style={styles.priceForTwoMuted}>for two</Text>
+                        </Text>
+                      </View>
+
+                      <View style={styles.viewMenuCTA}>
+                        <Text style={styles.viewMenuCTAText}>View Menu &amp; Tiffins →</Text>
                       </View>
                     </View>
                   </View>
                 </TouchableOpacity>
               ))
             )}
-          </ScrollView>
 
-          {/* Floating Cart Bar if cart has items */}
-          {totalCartCount > 0 && (
-            <View style={styles.floatingCartBar}>
-              <View>
-                <Text style={styles.floatingCartCount}>{totalCartCount} item(s) • ₹{cartSubtotal}</Text>
-                <Text style={styles.floatingCartSub}>Returnable Dabba included</Text>
-              </View>
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        )}
+
+        {/* ===================== TAB 2: EXPLORE / CURATED COLLECTIONS ===================== */}
+        {activeBottomTab === 'EXPLORE' && (
+          <ScrollView
+            style={styles.mainFeedScroll}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.mainFeedContent}
+          >
+            <View style={styles.exploreHeroHeader}>
+              <Text style={styles.exploreHeaderTag}>REGIONAL SPECIALS</Text>
+              <Text style={styles.exploreHeaderTitle}>Authentic Flavors from Home Roots</Text>
+              <Text style={styles.exploreHeaderSub}>
+                Hand-picked home kitchens cooking heritage recipes with authentic spices and pure ghee.
+              </Text>
+            </View>
+
+            {/* Curated Grid Banners */}
+            {[
+              {
+                title: '👵 Dadi-Nani Heritage Recipes',
+                desc: 'Slow-cooked lentils, roasted spices in cast iron, and traditional grain rotis.',
+                tag: 'Pure Nostalgia',
+                bg: '#FEF3C7',
+                border: '#FDE68A',
+                textColor: '#92400E',
+                filter: 'thali',
+              },
+              {
+                title: '🥗 Diabetic-Friendly Low-GI Pots',
+                desc: 'Foxtail millet khichdi, bitter gourd sabzi, methi parathas with zero refined sugar.',
+                tag: 'Clinically Balanced',
+                bg: '#ECFDF5',
+                border: '#A7F3D0',
+                textColor: '#065F46',
+                filter: 'healthy',
+              },
+              {
+                title: '⚡ 15-Minute Hyper-Local Lunch Drops',
+                desc: 'Hot steel dabbas dispatched straight from home kitchens inside your gated community.',
+                tag: 'Zero Wait',
+                bg: '#EFF6FF',
+                border: '#BFDBFE',
+                textColor: '#1E40AF',
+                filter: 'fast',
+              },
+              {
+                title: '🥘 Sunday Clay Handi Dum Feasts',
+                desc: 'Aged basmati rice sealed with wheat dough, dum cooked over fragrant charcoal fire.',
+                tag: 'Slow Simmered',
+                bg: '#FFF1F2',
+                border: '#FECDD3',
+                textColor: '#9F1239',
+                filter: 'biryani',
+              },
+            ].map((col, idx) => (
               <TouchableOpacity
-                style={styles.floatingCheckoutBtn}
-                onPress={() => setCartModalVisible(true)}
+                key={idx}
+                style={[
+                  styles.curatedExploreCard,
+                  { backgroundColor: col.bg, borderColor: col.border },
+                ]}
+                activeOpacity={0.88}
+                onPress={() => {
+                  setSearch(col.filter);
+                  setActiveBottomTab('HOME');
+                }}
               >
-                <Text style={styles.floatingCheckoutBtnText}>View Cart →</Text>
+                <View style={styles.curatedTopRow}>
+                  <Text style={[styles.curatedTag, { color: col.textColor }]}>{col.tag}</Text>
+                  <Text style={[styles.curatedArrow, { color: col.textColor }]}>Explore Collection →</Text>
+                </View>
+                <Text style={[styles.curatedTitle, { color: col.textColor }]}>{col.title}</Text>
+                <Text style={[styles.curatedDesc, { color: col.textColor }]}>{col.desc}</Text>
+              </TouchableOpacity>
+            ))}
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        )}
+
+        {/* ===================== TAB 3: TIFFIN SUBSCRIPTIONS ===================== */}
+        {activeBottomTab === 'TIFFINS' && (
+          <ScrollView
+            style={styles.mainFeedScroll}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.mainFeedContent}
+          >
+            <View style={styles.tiffinHeroCard}>
+              <View style={styles.tiffinHeroBadge}>
+                <Text style={styles.tiffinHeroBadgeText}>🍱 DAILY OFFICE &amp; HOME TIFFINS</Text>
+              </View>
+              <Text style={styles.tiffinHeroTitle}>Save Cooking Time. Eat Clean Everyday.</Text>
+              <Text style={styles.tiffinHeroSubtitle}>
+                Pre-book 7, 14, or 30 days of wholesome home meals. Delivered hot in sanitized steel dabbas. Pause or skip meals anytime with 1 tap.
+              </Text>
+
+              <View style={styles.tiffinPerksRow}>
+                <View style={styles.tiffinPerk}>
+                  <Text style={styles.tiffinPerkIcon}>🛡️</Text>
+                  <Text style={styles.tiffinPerkText}>Zero Delivery Fee</Text>
+                </View>
+                <View style={styles.tiffinPerk}>
+                  <Text style={styles.tiffinPerkIcon}>⏸️</Text>
+                  <Text style={styles.tiffinPerkText}>Pause Anytime</Text>
+                </View>
+                <View style={styles.tiffinPerk}>
+                  <Text style={styles.tiffinPerkIcon}>🍲</Text>
+                  <Text style={styles.tiffinPerkText}>Different Menu Daily</Text>
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.tiffinSectionHeading}>Popular Neighborhood Meal Plans</Text>
+
+            {FALLBACK_SUBSCRIPTIONS.map((plan) => (
+              <View key={plan.id} style={styles.planCardNew}>
+                <View style={styles.planCardTop}>
+                  <View style={styles.planPackBadge}>
+                    <Text style={styles.planPackBadgeText}>{plan.totalMeals} MEAL PACK</Text>
+                  </View>
+                  <Text style={styles.planDietPill}>{plan.dietaryType}</Text>
+                </View>
+
+                <Text style={styles.planTitleNew}>{plan.title}</Text>
+                <Text style={styles.planDescNew}>{plan.description}</Text>
+
+                <View style={styles.planDivider} />
+
+                <View style={styles.planPricingRow}>
+                  <View>
+                    <Text style={styles.planPricePerMeal}>₹{Math.round(plan.price / plan.totalMeals)} / meal</Text>
+                    <Text style={styles.planPriceTotal}>₹{plan.price} total (all inclusive)</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.planSubscribeCTA}
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      Alert.alert(
+                        '✨ Tiffin Subscription Active!',
+                        `You have subscribed to ${plan.title}.\nFirst hot steel dabba will arrive tomorrow at your address.\nNo single-use plastic guaranteed!`
+                      );
+                    }}
+                  >
+                    <Text style={styles.planSubscribeCTAText}>Subscribe Now</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        )}
+
+        {/* ===================== TAB 4: ORDERS & LIVE TRACKING ===================== */}
+        {activeBottomTab === 'ORDERS' && (
+          <ScrollView
+            style={styles.mainFeedScroll}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.mainFeedContent}
+          >
+            {activeOrder ? (
+              <View>
+                <View style={styles.activeOrderBanner}>
+                  <View style={styles.activeOrderBannerHeader}>
+                    <View>
+                      <Text style={styles.activeOrderTag}>CURRENT ACTIVE ORDER</Text>
+                      <Text style={styles.activeOrderKitchenName}>{activeOrder.kitchenName}</Text>
+                      <Text style={styles.activeOrderItemsSummary}>{activeOrder.itemsSummary}</Text>
+                    </View>
+                    <View style={styles.activeOrderAmtPill}>
+                      <Text style={styles.activeOrderAmtText}>₹{activeOrder.totalAmount}</Text>
+                    </View>
+                  </View>
+
+                  {/* 4-Digit Delivery OTP Card */}
+                  <View style={styles.heroOtpCard}>
+                    <Text style={styles.heroOtpLabel}>DOORSTEP DELIVERY OTP</Text>
+                    <Text style={styles.heroOtpDigits}>{activeOrder.deliveryOtp}</Text>
+                    <Text style={styles.heroOtpNotice}>
+                      Share this 4-digit verification code with your rider upon arrival to receive your fresh meal.
+                    </Text>
+                  </View>
+
+                  {/* Milestone Tracker Stepper */}
+                  <View style={styles.liveTimelineStepper}>
+                    <View style={styles.timelineStepItem}>
+                      <View style={styles.stepCircleDone}>
+                        <Text style={styles.stepCircleDoneText}>✓</Text>
+                      </View>
+                      <View style={styles.stepInfoCol}>
+                        <Text style={styles.stepHeaderBold}>Order Accepted</Text>
+                        <Text style={styles.stepSubDetail}>Kitchen confirmed request</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.timelineStepItem}>
+                      <View style={styles.stepCircleActive}>
+                        <Text style={styles.stepCircleActiveEmoji}>🍲</Text>
+                      </View>
+                      <View style={styles.stepInfoCol}>
+                        <Text style={styles.stepHeaderBoldActive}>Simmering Fresh in Small Batch</Text>
+                        <Text style={styles.stepSubDetail}>Homemaker is preparing hand-rolled phulkas &amp; dal</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.timelineStepItem}>
+                      <View style={styles.stepCirclePending}>
+                        <Text style={styles.stepCirclePendingText}>🛵</Text>
+                      </View>
+                      <View style={styles.stepInfoCol}>
+                        <Text style={styles.stepHeaderPending}>Neighborhood EV Dispatch</Text>
+                        <Text style={styles.stepSubDetail}>{activeOrder.riderName} assigned</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Returnable Dabba & Eco Impact Box */}
+                  <View style={styles.dabbaStatusBox}>
+                    <View style={styles.dabbaIconCircle}>
+                      <Text style={{ fontSize: 20 }}>🌱</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.dabbaStatusTitle}>{activeOrder.dabbaType}</Text>
+                      <Text style={styles.dabbaStatusDesc}>
+                        Thank you for keeping 2 plastic takeaway containers out of Indian landfills today!
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Past Orders List */}
+                <Text style={styles.pastOrdersTitle}>Recent Order History</Text>
+                {[
+                  {
+                    orderNo: 'FD-774910',
+                    kitchen: "Amma's South Indian Kitchen",
+                    items: '2x Ghee Podi Thatte Idli, 1x Filter Coffee',
+                    date: 'Yesterday, 8:45 AM',
+                    amt: 200,
+                    status: 'DELIVERED',
+                  },
+                  {
+                    orderNo: 'FD-762934',
+                    kitchen: "Anita's Ghar Ka Khana",
+                    items: '1x Puran Poli with Katachi Amti',
+                    date: '28 Oct, 1:15 PM',
+                    amt: 140,
+                    status: 'DELIVERED',
+                  },
+                ].map((ord, idx) => (
+                  <View key={idx} style={styles.pastOrderCard}>
+                    <View style={styles.pastOrderTopRow}>
+                      <View>
+                        <Text style={styles.pastOrderKitchen}>{ord.kitchen}</Text>
+                        <Text style={styles.pastOrderItems}>{ord.items}</Text>
+                        <Text style={styles.pastOrderDate}>{ord.date}</Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.pastOrderAmt}>₹{ord.amt}</Text>
+                        <View style={styles.pastOrderDeliveredPill}>
+                          <Text style={styles.pastOrderDeliveredText}>✓ {ord.status}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyResultsCard}>
+                <Text style={styles.emptyResultsEmoji}>📦</Text>
+                <Text style={styles.emptyResultsTitle}>No active orders right now</Text>
+                <Text style={styles.emptyResultsSubtitle}>Explore delicious home-cooked meals from nearby kitchens.</Text>
+                <TouchableOpacity
+                  style={styles.expandRadiusBtn}
+                  onPress={() => setActiveBottomTab('HOME')}
+                >
+                  <Text style={styles.expandRadiusBtnText}>Order Fresh Food →</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        )}
+
+        {/* ===================== TAB 5: HOMEMAKER COOK STUDIO ===================== */}
+        {activeBottomTab === 'STUDIO' && (
+          <ScrollView
+            style={styles.mainFeedScroll}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.mainFeedContent}
+          >
+            {/* Chef Profile Header */}
+            <View style={styles.studioHeroCard}>
+              <View style={styles.studioHeaderRow}>
+                <View>
+                  <Text style={styles.studioChefName}>Anita Deshmukh 👩‍🍳</Text>
+                  <Text style={styles.studioKitchenTitle}>Anita&apos;s Ghar Ka Khana • Bellandur</Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.statusToggleBtn,
+                    isKitchenOpen ? styles.statusOpenBtn : styles.statusClosedBtn,
+                  ]}
+                  onPress={() => setIsKitchenOpen(!isKitchenOpen)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.statusToggleBtnText}>
+                    {isKitchenOpen ? '🟢 OPEN FOR ORDERS' : '🔴 CLOSED'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Stats Grid */}
+              <View style={styles.studioStatGrid}>
+                <View style={styles.studioStatBox}>
+                  <Text style={styles.studioStatNumber}>₹2,520</Text>
+                  <Text style={styles.studioStatLabel}>Today&apos;s Net Payout</Text>
+                </View>
+                <View style={styles.studioStatBox}>
+                  <Text style={styles.studioStatNumber}>10%</Text>
+                  <Text style={styles.studioStatLabel}>Platform Fee (Fair)</Text>
+                </View>
+                <View style={styles.studioStatBox}>
+                  <Text style={styles.studioStatNumber}>7</Text>
+                  <Text style={styles.studioStatLabel}>Daily Tiffin Subs</Text>
+                </View>
+              </View>
+
+              {/* Instant Daily UPI Payout */}
+              <TouchableOpacity
+                style={styles.upiPayoutBox}
+                onPress={() => {
+                  Alert.alert(
+                    '⚡ UPI Instant Settlement Successful',
+                    '₹2,520 deposited into anita@okhdfcbank!\nTransaction Ref: UPI-984210\nZero deduction fee.'
+                  );
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.upiPayoutTitle}>⚡ Instant UPI Bank Transfer</Text>
+                  <Text style={styles.upiPayoutSub}>Withdraw ₹2,520 directly to anita@okhdfcbank</Text>
+                </View>
+                <View style={styles.upiPayoutActionPill}>
+                  <Text style={styles.upiPayoutActionText}>Withdraw →</Text>
+                </View>
               </TouchableOpacity>
             </View>
-          )}
+
+            {/* Live Cooking Queue */}
+            <View style={styles.sectionHeadingWithSub}>
+              <Text style={styles.sectionMainTitle}>🔥 Live Cooking Queue ({homemakerOrders.length})</Text>
+              <Text style={styles.sectionSubtitleText}>Bellandur Neighborhood Delivery</Text>
+            </View>
+
+            {homemakerOrders.map((ord) => (
+              <View key={ord.id} style={styles.homemakerOrderCard}>
+                <View style={styles.homemakerOrderCardTop}>
+                  <View>
+                    <Text style={styles.homemakerOrderNumber}>{ord.orderNumber}</Text>
+                    <Text style={styles.homemakerCustomerName}>{ord.customerName}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.orderStateBadge,
+                      ord.status === 'READY_FOR_PICKUP' ? styles.orderStateReady : styles.orderStatePrep,
+                    ]}
+                  >
+                    <Text style={styles.orderStateBadgeText}>{ord.status.replace('_', ' ')}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.homemakerOrderItems}>{ord.items}</Text>
+                <View style={styles.homemakerOrderFooter}>
+                  <Text style={styles.homemakerOrderAmt}>₹{ord.totalAmount} • {ord.slot}</Text>
+                  {ord.status === 'PREPARING' ? (
+                    <TouchableOpacity
+                      style={styles.markReadyBtn}
+                      onPress={() => markOrderReady(ord.id)}
+                    >
+                      <Text style={styles.markReadyBtnText}>✓ Ready for Pickup</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.otpReadyPill}>
+                      <Text style={styles.otpReadyPillText}>Rider OTP: {ord.deliveryOtp}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            ))}
+
+            {/* Small Batch Portion Limiter */}
+            <View style={[styles.sectionHeadingWithSub, { marginTop: 14 }]}>
+              <Text style={styles.sectionMainTitle}>🍱 Aaj Ka Menu &amp; Batch Limiter</Text>
+              <Text style={styles.sectionSubtitleText}>Limits daily order intake to protect homemaker quality</Text>
+            </View>
+
+            {homemakerMenu.map((item) => (
+              <View key={item.id} style={styles.batchLimiterCard}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.batchItemName}>{item.name}</Text>
+                  <Text style={styles.batchItemPrice}>₹{item.price} • Max {item.dailyStockLimit} portions</Text>
+                  <View style={styles.portionsRemainingRow}>
+                    <Text style={styles.portionsLabel}>Portions Left:</Text>
+                    <Text
+                      style={[
+                        styles.portionsValue,
+                        (item.portionsRemaining || 0) < 5 && styles.portionsValueLow,
+                      ]}
+                    >
+                      {item.portionsRemaining} / {item.dailyStockLimit}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.stepperActionCol}>
+                  <View style={styles.stepperRowGroup}>
+                    <TouchableOpacity
+                      style={styles.portionAdjustBtn}
+                      onPress={() => adjustPortion(item.id, -1)}
+                    >
+                      <Text style={styles.portionAdjustBtnText}>-1</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.portionAdjustBtn, styles.portionAdjustBtnAdd]}
+                      onPress={() => adjustPortion(item.id, 5)}
+                    >
+                      <Text style={[styles.portionAdjustBtnText, { color: '#FFF' }]}>+5</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.soldOutPill}
+                    onPress={() => adjustPortion(item.id, -(item.portionsRemaining || 0))}
+                  >
+                    <Text style={styles.soldOutPillText}>Sold Out</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+        )}
+      </View>
+
+      {/* ===================== FLOATING CART SUMMARY PILL (WHEN ITEMS IN CART) ===================== */}
+      {totalCartCount > 0 && activeBottomTab !== 'ORDERS' && (
+        <View style={styles.floatingCartPillContainer}>
+          <View style={styles.floatingCartPill}>
+            <View style={styles.floatingCartLeft}>
+              <View style={styles.floatingCartCounterCircle}>
+                <Text style={styles.floatingCartCounterText}>{totalCartCount}</Text>
+              </View>
+              <View>
+                <Text style={styles.floatingCartTotalAmount}>₹{cartSubtotal}</Text>
+                <Text style={styles.floatingCartSubNotice}>Returnable Steel Dabba Included</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.floatingCartCheckoutCTA}
+              onPress={() => setCartModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.floatingCartCheckoutCTAText}>Review Dabba →</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
+      {/* ===================== BOTTOM NAVIGATION BAR ===================== */}
+      <View style={styles.bottomNavigationBar}>
+        {[
+          { id: 'HOME', label: 'Rasois', icon: '🍲' },
+          { id: 'EXPLORE', label: 'Explore', icon: '🧭' },
+          { id: 'TIFFINS', label: 'Tiffins', icon: '🍱' },
+          { id: 'ORDERS', label: 'Orders', icon: '🛵', badge: activeOrder ? '1' : undefined },
+          { id: 'STUDIO', label: 'Cook Studio', icon: '👩‍🍳' },
+        ].map((tab) => {
+          const isSelected = activeBottomTab === tab.id;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={styles.bottomNavTabItem}
+              onPress={() => setActiveBottomTab(tab.id as any)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.bottomNavIconWrapper}>
+                <Text style={[styles.bottomNavIcon, isSelected && styles.bottomNavIconSelected]}>
+                  {tab.icon}
+                </Text>
+                {tab.badge && (
+                  <View style={styles.bottomNavBadge}>
+                    <Text style={styles.bottomNavBadgeText}>{tab.badge}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.bottomNavLabel, isSelected && styles.bottomNavLabelSelected]}>
+                {tab.label}
+              </Text>
+              {isSelected && <View style={styles.bottomNavActiveIndicator} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {/* ===================== KITCHEN MENU & TIFFINS MODAL ===================== */}
       <Modal visible={menuModalVisible} animationType="slide" transparent={false}>
-        <SafeAreaView style={styles.modalSafe}>
+        <SafeAreaView style={styles.menuModalSafe}>
           {selectedKitchen && (
             <View style={{ flex: 1 }}>
               {/* Modal Header */}
-              <View style={styles.menuModalHeader}>
+              <View style={styles.modalHeaderTopBar}>
                 <TouchableOpacity
-                  style={styles.modalCloseBtn}
+                  style={styles.modalBackBtn}
                   onPress={() => setMenuModalVisible(false)}
                 >
-                  <Text style={styles.modalCloseIcon}>←</Text>
+                  <Text style={styles.modalBackIcon}>←</Text>
                 </TouchableOpacity>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.modalHeaderTitle} numberOfLines={1}>
+                  <Text style={styles.modalKitchenTitle} numberOfLines={1}>
                     {selectedKitchen.name}
                   </Text>
-                  <Text style={styles.modalHeaderSub}>
-                    ★ {selectedKitchen.rating} • {selectedKitchen.distanceKm || 0.6} km • 🛡️ {selectedKitchen.hygieneScore}% Hygiene
+                  <Text style={styles.modalKitchenSubtitle}>
+                    ★ {selectedKitchen.rating} • {selectedKitchen.distanceKm || 0.8} km • 🛡️ {selectedKitchen.hygieneScore}% Hygiene
                   </Text>
                 </View>
               </View>
 
-              {/* Sub-tabs: A la Carte Menu vs Tiffin Meal Plans */}
-              <View style={styles.menuSubTabs}>
+              {/* Sub-tabs: Daily Menu vs Tiffin Subscriptions */}
+              <View style={styles.modalSubTabsBar}>
                 <TouchableOpacity
-                  style={[styles.menuSubTab, menuTab === 'MENU' && styles.menuSubTabActive]}
+                  style={[styles.modalSubTabItem, menuTab === 'MENU' && styles.modalSubTabItemActive]}
                   onPress={() => setMenuTab('MENU')}
                 >
-                  <Text style={[styles.menuSubTabText, menuTab === 'MENU' && styles.menuSubTabTextActive]}>
-                    🍛 Daily Menu
+                  <Text style={[styles.modalSubTabText, menuTab === 'MENU' && styles.modalSubTabTextActive]}>
+                    🍛 Aaj Ka Menu
                   </Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
-                  style={[styles.menuSubTab, menuTab === 'SUBSCRIPTIONS' && styles.menuSubTabActive]}
+                  style={[styles.modalSubTabItem, menuTab === 'SUBSCRIPTIONS' && styles.modalSubTabItemActive]}
                   onPress={() => setMenuTab('SUBSCRIPTIONS')}
                 >
-                  <Text style={[styles.menuSubTabText, menuTab === 'SUBSCRIPTIONS' && styles.menuSubTabTextActive]}>
+                  <Text style={[styles.modalSubTabText, menuTab === 'SUBSCRIPTIONS' && styles.modalSubTabTextActive]}>
                     📅 Tiffin Subscriptions
                   </Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Content */}
-              <ScrollView style={styles.menuScroll} showsVerticalScrollIndicator={false}>
+              {/* Modal Scroll List */}
+              <ScrollView style={styles.modalScrollBody} showsVerticalScrollIndicator={false}>
                 {menuTab === 'MENU' ? (
                   kitchenMenuItems.map((item) => {
                     const qty = getCartItemQuantity(item.id);
                     return (
-                      <View key={item.id} style={styles.menuItemRow}>
-                        <View style={{ flex: 1, paddingRight: 12 }}>
-                          <View style={styles.dietRow}>
-                            <Text style={item.dietaryType === 'VEG' ? styles.vegIcon : styles.nonVegIcon}>
-                              {item.dietaryType === 'VEG' ? '🟢 Veg' : '🔴 Non-Veg'}
-                            </Text>
+                      <View key={item.id} style={styles.dishCardRow}>
+                        <View style={{ flex: 1, paddingRight: 14 }}>
+                          <View style={styles.dietSpecialRow}>
+                            <View style={item.dietaryType === 'VEG' ? styles.vegSquareDot : styles.nonVegSquareDot}>
+                              <View style={item.dietaryType === 'VEG' ? styles.vegInnerCircle : styles.nonVegInnerCircle} />
+                            </View>
+                            <Text style={styles.dietLabelText}>{item.dietaryType}</Text>
                             {item.isDailySpecial && (
-                              <View style={styles.specialBadge}>
-                                <Text style={styles.specialBadgeText}>Daily Special</Text>
+                              <View style={styles.dailySpecialBadge}>
+                                <Text style={styles.dailySpecialBadgeText}>Daily Special</Text>
                               </View>
                             )}
                           </View>
-                          <Text style={styles.menuItemName}>{item.name}</Text>
-                          <Text style={styles.menuItemPrice}>₹{item.price}</Text>
-                          <Text style={styles.menuItemDesc} numberOfLines={2}>
+
+                          <Text style={styles.dishNameText}>{item.name}</Text>
+                          <Text style={styles.dishPriceText}>₹{item.price}</Text>
+                          <Text style={styles.dishDescriptionText} numberOfLines={2}>
                             {item.description}
                           </Text>
+
                           {item.portionsRemaining !== undefined && (
-                            <Text style={styles.portionNotice}>
-                              ⚡ Only {item.portionsRemaining} portions left today
+                            <Text style={styles.dishPortionsNotice}>
+                              ⚡ Only {item.portionsRemaining} portions cooked today
                             </Text>
                           )}
                         </View>
 
-                        {/* Add to Cart Stepper */}
-                        <View style={styles.itemActionCol}>
+                        {/* Quantity Stepper or Add Button */}
+                        <View style={styles.dishAddCol}>
                           {qty === 0 ? (
                             <TouchableOpacity
-                              style={styles.addBtn}
+                              style={styles.dishAddButton}
                               onPress={() => addToCart(item)}
+                              activeOpacity={0.8}
                             >
-                              <Text style={styles.addBtnText}>ADD +</Text>
+                              <Text style={styles.dishAddButtonText}>ADD +</Text>
                             </TouchableOpacity>
                           ) : (
-                            <View style={styles.stepperContainer}>
+                            <View style={styles.dishStepperBox}>
                               <TouchableOpacity
-                                style={styles.stepperMinus}
+                                style={styles.dishStepperBtn}
                                 onPress={() => removeFromCart(item.id)}
                               >
-                                <Text style={styles.stepperSign}>-</Text>
+                                <Text style={styles.dishStepperBtnText}>−</Text>
                               </TouchableOpacity>
-                              <Text style={styles.stepperQty}>{qty}</Text>
+                              <Text style={styles.dishStepperCount}>{qty}</Text>
                               <TouchableOpacity
-                                style={styles.stepperPlus}
+                                style={styles.dishStepperBtn}
                                 onPress={() => addToCart(item)}
                               >
-                                <Text style={styles.stepperSign}>+</Text>
+                                <Text style={styles.dishStepperBtnText}>+</Text>
                               </TouchableOpacity>
                             </View>
                           )}
@@ -913,45 +1316,51 @@ function FoodAppMain() {
                   })
                 ) : (
                   kitchenPlans.map((plan) => (
-                    <View key={plan.id} style={styles.planCard}>
-                      <View style={styles.planBadge}>
-                        <Text style={styles.planBadgeText}>{plan.totalMeals} MEAL PACK</Text>
+                    <View key={plan.id} style={styles.planCardNew}>
+                      <View style={styles.planPackBadge}>
+                        <Text style={styles.planPackBadgeText}>{plan.totalMeals} MEALS</Text>
                       </View>
-                      <Text style={styles.planTitle}>{plan.title}</Text>
-                      <Text style={styles.planDesc}>{plan.description}</Text>
-                      <View style={styles.planFooter}>
-                        <Text style={styles.planPrice}>₹{plan.price} <Text style={styles.priceSub}>all-inclusive</Text></Text>
+                      <Text style={styles.planTitleNew}>{plan.title}</Text>
+                      <Text style={styles.planDescNew}>{plan.description}</Text>
+                      <View style={styles.planPricingRow}>
+                        <Text style={styles.planPriceTotal}>₹{plan.price}</Text>
                         <TouchableOpacity
-                          style={styles.planSubscribeBtn}
+                          style={styles.planSubscribeCTA}
                           onPress={() => {
-                            Alert.alert('Tiffin Subscribed!', `You subscribed to ${plan.title}. Hot home meals start tomorrow in steel dabba.`);
+                            Alert.alert('Subscribed!', `You subscribed to ${plan.title}. Fresh hot meals start tomorrow.`);
                             setMenuModalVisible(false);
                           }}
                         >
-                          <Text style={styles.planSubscribeText}>Subscribe Now</Text>
+                          <Text style={styles.planSubscribeCTAText}>Subscribe Now</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
                   ))
                 )}
-                <View style={{ height: 100 }} />
+                <View style={{ height: 120 }} />
               </ScrollView>
 
               {/* Floating Bottom Cart Bar inside Menu */}
               {totalCartCount > 0 && (
-                <View style={styles.floatingCartBar}>
-                  <View>
-                    <Text style={styles.floatingCartCount}>{totalCartCount} item(s) • ₹{cartSubtotal}</Text>
-                    <Text style={styles.floatingCartSub}>Returnable Dabba Guarantee</Text>
+                <View style={styles.floatingCartPillContainer}>
+                  <View style={styles.floatingCartPill}>
+                    <View style={styles.floatingCartLeft}>
+                      <View style={styles.floatingCartCounterCircle}>
+                        <Text style={styles.floatingCartCounterText}>{totalCartCount}</Text>
+                      </View>
+                      <View>
+                        <Text style={styles.floatingCartTotalAmount}>₹{cartSubtotal}</Text>
+                        <Text style={styles.floatingCartSubNotice}>Returnable Steel Dabba Included</Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.floatingCartCheckoutCTA}
+                      onPress={() => setCartModalVisible(true)}
+                    >
+                      <Text style={styles.floatingCartCheckoutCTAText}>Review Cart →</Text>
+                    </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={styles.floatingCheckoutBtn}
-                    onPress={() => {
-                      setCartModalVisible(true);
-                    }}
-                  >
-                    <Text style={styles.floatingCheckoutBtnText}>Review Cart →</Text>
-                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -961,65 +1370,70 @@ function FoodAppMain() {
 
       {/* ===================== CART & CHECKOUT MODAL ===================== */}
       <Modal visible={cartModalVisible} animationType="slide" transparent={false}>
-        <SafeAreaView style={styles.modalSafe}>
-          <View style={styles.menuModalHeader}>
+        <SafeAreaView style={styles.menuModalSafe}>
+          <View style={styles.modalHeaderTopBar}>
             <TouchableOpacity
-              style={styles.modalCloseBtn}
+              style={styles.modalBackBtn}
               onPress={() => setCartModalVisible(false)}
             >
-              <Text style={styles.modalCloseIcon}>←</Text>
+              <Text style={styles.modalBackIcon}>←</Text>
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.modalHeaderTitle}>Your Cart & Checkout</Text>
-              <Text style={styles.modalHeaderSub}>Bellandur Neighborhood Hub</Text>
+              <Text style={styles.modalKitchenTitle}>Your Dabba &amp; Checkout</Text>
+              <Text style={styles.modalKitchenSubtitle}>Bellandur Neighborhood Hub</Text>
             </View>
           </View>
 
           {cart.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>🛍️</Text>
-              <Text style={styles.emptyTitle}>Your cart is empty</Text>
-              <Text style={styles.emptySub}>Add some delicious homestyle thalis or bowls!</Text>
+            <View style={styles.emptyResultsCard}>
+              <Text style={styles.emptyResultsEmoji}>🛍️</Text>
+              <Text style={styles.emptyResultsTitle}>Your Dabba is Empty</Text>
+              <Text style={styles.emptyResultsSubtitle}>Explore fresh home thalis and small batch regional curries!</Text>
             </View>
           ) : (
-            <ScrollView style={styles.cartScroll} showsVerticalScrollIndicator={false}>
-              {/* Items List */}
-              <View style={styles.cartSection}>
-                <Text style={styles.cartSectionTitle}>Items Ordered</Text>
+            <ScrollView style={styles.modalScrollBody} showsVerticalScrollIndicator={false}>
+              {/* Ordered Items List */}
+              <View style={styles.checkoutSectionCard}>
+                <Text style={styles.checkoutSectionHeader}>Items in Your Order</Text>
                 {cart.map((ci) => (
-                  <View key={ci.item.id} style={styles.cartItemRow}>
+                  <View key={ci.item.id} style={styles.checkoutItemRow}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.cartItemName}>{ci.item.name}</Text>
-                      <Text style={styles.cartItemPrice}>₹{ci.item.price * ci.quantity}</Text>
+                      <Text style={styles.checkoutItemName}>{ci.item.name}</Text>
+                      <Text style={styles.checkoutItemPrice}>₹{ci.item.price * ci.quantity}</Text>
                     </View>
-                    <View style={styles.stepperContainer}>
+                    <View style={styles.dishStepperBox}>
                       <TouchableOpacity
-                        style={styles.stepperMinus}
+                        style={styles.dishStepperBtn}
                         onPress={() => removeFromCart(ci.item.id)}
                       >
-                        <Text style={styles.stepperSign}>-</Text>
+                        <Text style={styles.dishStepperBtnText}>−</Text>
                       </TouchableOpacity>
-                      <Text style={styles.stepperQty}>{ci.quantity}</Text>
+                      <Text style={styles.dishStepperCount}>{ci.quantity}</Text>
                       <TouchableOpacity
-                        style={styles.stepperPlus}
+                        style={styles.dishStepperBtn}
                         onPress={() => addToCart(ci.item)}
                       >
-                        <Text style={styles.stepperSign}>+</Text>
+                        <Text style={styles.dishStepperBtnText}>+</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
                 ))}
               </View>
 
-              {/* Gated Society Pool (FREE Delivery) */}
-              <View style={[styles.cartSection, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <Text style={[styles.cartSectionTitle, { color: '#1E3A8A', marginBottom: 0 }]}>
+              {/* Gated Society Pooling (Free Delivery) */}
+              <View style={[styles.checkoutSectionCard, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+                <View style={styles.societyPoolTopHeader}>
+                  <Text style={[styles.checkoutSectionHeader, { color: '#1E3A8A', marginBottom: 0 }]}>
                     🏢 Gated Society Pool (FREE Delivery)
                   </Text>
                   <TouchableOpacity
                     onPress={() => setIsCommunityPoolActive(!isCommunityPoolActive)}
-                    style={{ backgroundColor: isCommunityPoolActive ? '#2563EB' : '#FFFFFF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}
+                    style={{
+                      backgroundColor: isCommunityPoolActive ? '#2563EB' : '#FFFFFF',
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 6,
+                    }}
                   >
                     <Text style={{ fontSize: 10, fontWeight: '900', color: isCommunityPoolActive ? '#FFFFFF' : '#2563EB' }}>
                       {isCommunityPoolActive ? '✓ Pooled' : '+ Join Pool'}
@@ -1028,41 +1442,44 @@ function FoodAppMain() {
                 </View>
 
                 {isCommunityPoolActive && (
-                  <View style={{ gap: 6, marginTop: 4 }}>
+                  <View style={{ gap: 6, marginTop: 8 }}>
                     <View style={{ flexDirection: 'row', gap: 6 }}>
                       {['Marvel Serenity', 'Green Glen', 'Prestige Tech'].map((soc) => (
                         <TouchableOpacity
                           key={soc}
                           onPress={() => setSelectedSociety(soc)}
                           style={[
-                            { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DBEAFE' },
-                            selectedSociety === soc && { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+                            styles.societySelectorChip,
+                            selectedSociety === soc && styles.societySelectorChipActive,
                           ]}
                         >
-                          <Text style={[{ fontSize: 10, fontWeight: '800', color: '#1E40AF' }, selectedSociety === soc && { color: '#FFF' }]}>
+                          <Text
+                            style={[
+                              styles.societySelectorChipText,
+                              selectedSociety === soc && { color: '#FFF' },
+                            ]}
+                          >
                             {soc}
                           </Text>
                         </TouchableOpacity>
                       ))}
                     </View>
-                    <Text style={{ fontSize: 10, color: '#1D4ED8', fontStyle: 'italic', marginTop: 2 }}>
+                    <Text style={styles.societySavingsNotice}>
                       🎉 Delivery fee waived! Neighbor batch drop at {deliverySlot === 'INSTANT' ? '1:00 PM' : 'Scheduled Slot'}.
                     </Text>
                   </View>
                 )}
               </View>
 
-              {/* Homestyle Customizer */}
-              <View style={[styles.cartSection, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
-                <Text style={[styles.cartSectionTitle, { color: '#78350F' }]}>
+              {/* Homestyle Taste Customizer */}
+              <View style={[styles.checkoutSectionCard, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
+                <Text style={[styles.checkoutSectionHeader, { color: '#78350F' }]}>
                   ✨ Maa Ke Haath Ka Touch (Cooked To Your Taste)
                 </Text>
 
                 {/* Spice selector */}
-                <Text style={{ fontSize: 10, fontWeight: '800', color: '#92400E', marginBottom: 4 }}>
-                  1. Spice Level:
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                <Text style={styles.customizerLabel}>1. Spice Level:</Text>
+                <View style={styles.customizerButtonGroup}>
                   {[
                     { id: 'MILD', label: '🌱 Mild' },
                     { id: 'MEDIUM', label: '🥘 Medium' },
@@ -1072,11 +1489,16 @@ function FoodAppMain() {
                       key={s.id}
                       onPress={() => setSpiceLevel(s.id as any)}
                       style={[
-                        { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#FDE68A' },
-                        spiceLevel === s.id && { backgroundColor: '#D97706', borderColor: '#D97706' },
+                        styles.customizerPill,
+                        spiceLevel === s.id && styles.customizerPillActive,
                       ]}
                     >
-                      <Text style={[{ fontSize: 10, fontWeight: '800', color: '#78350F' }, spiceLevel === s.id && { color: '#FFF' }]}>
+                      <Text
+                        style={[
+                          styles.customizerPillText,
+                          spiceLevel === s.id && { color: '#FFF' },
+                        ]}
+                      >
                         {s.label}
                       </Text>
                     </TouchableOpacity>
@@ -1084,10 +1506,8 @@ function FoodAppMain() {
                 </View>
 
                 {/* Fat Selector */}
-                <Text style={{ fontSize: 10, fontWeight: '800', color: '#92400E', marginBottom: 4 }}>
-                  2. Cooking Fat:
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                <Text style={styles.customizerLabel}>2. Cooking Fat:</Text>
+                <View style={styles.customizerButtonGroup}>
                   {[
                     { id: 'COLD_PRESSED', label: 'Groundnut Oil' },
                     { id: 'GIR_GHEE', label: 'Desi Cow Ghee' },
@@ -1097,11 +1517,16 @@ function FoodAppMain() {
                       key={f.id}
                       onPress={() => setCookingFat(f.id as any)}
                       style={[
-                        { flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#FDE68A' },
-                        cookingFat === f.id && { backgroundColor: '#D97706', borderColor: '#D97706' },
+                        styles.customizerPill,
+                        cookingFat === f.id && styles.customizerPillActive,
                       ]}
                     >
-                      <Text style={[{ fontSize: 10, fontWeight: '800', color: '#78350F' }, cookingFat === f.id && { color: '#FFF' }]}>
+                      <Text
+                        style={[
+                          styles.customizerPillText,
+                          cookingFat === f.id && { color: '#FFF' },
+                        ]}
+                      >
                         {f.label}
                       </Text>
                     </TouchableOpacity>
@@ -1110,208 +1535,128 @@ function FoodAppMain() {
 
                 {/* Custom Note input */}
                 <TextInput
-                  placeholder="Special note for home chef (e.g. keep dal runny, add lemon)..."
+                  placeholder="Special note for home chef (e.g. keep dal runny, light tadka)..."
                   placeholderTextColor="#A16207"
                   value={chefCustomNote}
                   onChangeText={setChefCustomNote}
-                  style={{ backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 11, color: '#78350F' }}
+                  style={styles.chefCustomNoteInput}
                 />
               </View>
 
-              {/* Care For Elders & Gifting */}
-              <View style={[styles.cartSection, { backgroundColor: '#FFF1F2', borderColor: '#FECDD3' }]}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={{ fontSize: 16 }}>👵</Text>
-                    <View>
-                      <Text style={{ fontSize: 11, fontWeight: '900', color: '#881337' }}>
-                        Care for Elders / Gift Meal
-                      </Text>
-                      <Text style={{ fontSize: 9, color: '#9F1239' }}>
-                        Printed love note on steel dabba pouch
-                      </Text>
-                    </View>
+              {/* Care For Elders / Gift a Meal */}
+              <TouchableOpacity
+                style={[
+                  styles.checkoutSectionCard,
+                  { backgroundColor: '#FFF1F2', borderColor: '#FECDD3' },
+                ]}
+                onPress={() => setElderCareGift(!elderCareGift)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.elderCareRow}>
+                  <Text style={{ fontSize: 20 }}>👵</Text>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.elderCareTitle}>Care for Elders / Gift a Warm Meal</Text>
+                    <Text style={styles.elderCareSub}>Personalized handwritten love note printed on steel dabba tag</Text>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => {
-                      Alert.alert(
-                        '👵 Elder Care Gifting Active',
-                        'A warm personalized love note will be printed on the dabba tag. Rider will ring the bell gently and ensure proper doorstep handover.'
-                      );
-                    }}
-                    style={{ backgroundColor: '#E11D48', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}
-                  >
-                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '900' }}>+ Add Note</Text>
-                  </TouchableOpacity>
+                  <Text style={{ fontSize: 18 }}>{elderCareGift ? '☑️' : '⬜'}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
 
               {/* Delivery Slot Selection */}
-              <View style={styles.cartSection}>
-                <Text style={styles.cartSectionTitle}>Delivery Slot</Text>
-                <View style={styles.slotGrid}>
+              <View style={styles.checkoutSectionCard}>
+                <Text style={styles.checkoutSectionHeader}>Delivery Slot</Text>
+                <View style={styles.slotCardsRow}>
                   <TouchableOpacity
-                    style={[styles.slotCard, deliverySlot === 'INSTANT' && styles.slotCardActive]}
+                    style={[styles.slotSelectCard, deliverySlot === 'INSTANT' && styles.slotSelectCardActive]}
                     onPress={() => setDeliverySlot('INSTANT')}
                   >
-                    <Text style={[styles.slotTitle, deliverySlot === 'INSTANT' && styles.slotTitleActive]}>
+                    <Text style={[styles.slotSelectTitle, deliverySlot === 'INSTANT' && styles.slotSelectTitleActive]}>
                       ⚡ Instant
                     </Text>
-                    <Text style={styles.slotDesc}>15-20 Mins</Text>
+                    <Text style={styles.slotSelectSub}>15-20 Mins</Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
-                    style={[styles.slotCard, deliverySlot === 'PREORDER_LUNCH' && styles.slotCardActive]}
+                    style={[styles.slotSelectCard, deliverySlot === 'PREORDER_LUNCH' && styles.slotSelectCardActive]}
                     onPress={() => setDeliverySlot('PREORDER_LUNCH')}
                   >
-                    <Text style={[styles.slotTitle, deliverySlot === 'PREORDER_LUNCH' && styles.slotTitleActive]}>
-                      🍱 Lunch Slot
+                    <Text style={[styles.slotSelectTitle, deliverySlot === 'PREORDER_LUNCH' && styles.slotSelectTitleActive]}>
+                      🍱 Lunch
                     </Text>
-                    <Text style={styles.slotDesc}>1:00 PM</Text>
+                    <Text style={styles.slotSelectSub}>1:00 PM</Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
-                    style={[styles.slotCard, deliverySlot === 'PREORDER_DINNER' && styles.slotCardActive]}
+                    style={[styles.slotSelectCard, deliverySlot === 'PREORDER_DINNER' && styles.slotSelectCardActive]}
                     onPress={() => setDeliverySlot('PREORDER_DINNER')}
                   >
-                    <Text style={[styles.slotTitle, deliverySlot === 'PREORDER_DINNER' && styles.slotTitleActive]}>
-                      🌙 Dinner Slot
+                    <Text style={[styles.slotSelectTitle, deliverySlot === 'PREORDER_DINNER' && styles.slotSelectTitleActive]}>
+                      🌙 Dinner
                     </Text>
-                    <Text style={styles.slotDesc}>8:00 PM</Text>
+                    <Text style={styles.slotSelectSub}>8:00 PM</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {/* Zero Plastic Steel Dabba Commitment */}
+              {/* Returnable Dabba Guarantee */}
               <TouchableOpacity
-                style={styles.dabbaCheckbox}
+                style={styles.dabbaReturnCommitmentCard}
                 onPress={() => setReturnDabba(!returnDabba)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.dabbaCheckIcon}>{returnDabba ? '☑️' : '⬜'}</Text>
+                <Text style={{ fontSize: 20 }}>{returnDabba ? '☑️' : '⬜'}</Text>
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.dabbaTitle}>Returnable Steel Dabba (Zero Plastic)</Text>
-                  <Text style={styles.dabbaDesc}>
-                    I will return the previous stainless steel dabba to the rider upon arrival.
+                  <Text style={styles.dabbaReturnTitle}>Returnable Steel Dabba (Zero Single-Use Plastic)</Text>
+                  <Text style={styles.dabbaReturnDesc}>
+                    I will exchange my previous sanitized stainless steel dabba with the rider upon arrival.
                   </Text>
                 </View>
               </TouchableOpacity>
 
-              {/* Bill Details */}
-              <View style={styles.cartSection}>
-                <Text style={styles.cartSectionTitle}>Bill Summary</Text>
-                <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Item Total</Text>
-                  <Text style={styles.billValue}>₹{cartSubtotal}</Text>
+              {/* Bill Summary */}
+              <View style={styles.checkoutSectionCard}>
+                <Text style={styles.checkoutSectionHeader}>Bill Summary</Text>
+                <View style={styles.billLineRow}>
+                  <Text style={styles.billLineLabel}>Item Total</Text>
+                  <Text style={styles.billLineValue}>₹{cartSubtotal}</Text>
                 </View>
-                <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Delivery Partner Fee (≤ 5km)</Text>
-                  <Text style={[styles.billValue, deliveryFee === 0 && styles.textGreen]}>
-                    {deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`}
+                <View style={styles.billLineRow}>
+                  <Text style={styles.billLineLabel}>Neighborhood Delivery Partner</Text>
+                  <Text style={[styles.billLineValue, deliveryFee === 0 && { color: '#059669', fontWeight: '900' }]}>
+                    {deliveryFee === 0 ? 'FREE (Society Pooled)' : `₹${deliveryFee}`}
                   </Text>
                 </View>
-                <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Platform & Dabba Fee</Text>
-                  <Text style={styles.billValue}>₹{platformFee}</Text>
+                <View style={styles.billLineRow}>
+                  <Text style={styles.billLineLabel}>Platform &amp; Sanitized Dabba Care</Text>
+                  <Text style={styles.billLineValue}>₹{platformFee}</Text>
                 </View>
-                <View style={[styles.billRow, styles.billTotalRow]}>
-                  <Text style={styles.billTotalLabel}>To Pay</Text>
+
+                <View style={styles.billTotalLine}>
+                  <Text style={styles.billTotalLabel}>Grand Total</Text>
                   <Text style={styles.billTotalValue}>₹{grandTotal}</Text>
                 </View>
               </View>
 
               <TouchableOpacity
-                style={[styles.checkoutBtn, isPlacingOrder && styles.btnDisabled]}
+                style={[styles.confirmCheckoutBtn, isPlacingOrder && { opacity: 0.6 }]}
                 onPress={handlePlaceOrder}
                 disabled={isPlacingOrder}
+                activeOpacity={0.85}
               >
                 {isPlacingOrder ? (
                   <ActivityIndicator color="#FFF" />
                 ) : (
-                  <Text style={styles.checkoutBtnText}>Confirm & Pay ₹{grandTotal}</Text>
+                  <Text style={styles.confirmCheckoutBtnText}>Confirm Order &amp; Pay ₹{grandTotal}</Text>
                 )}
               </TouchableOpacity>
 
-              <View style={{ height: 40 }} />
+              <View style={{ height: 60 }} />
             </ScrollView>
           )}
         </SafeAreaView>
       </Modal>
 
-      {/* ===================== ORDER TRACKING & OTP MODAL ===================== */}
-      <Modal visible={trackingModalVisible} animationType="slide" transparent={false}>
-        <SafeAreaView style={styles.modalSafe}>
-          {activeOrder && (
-            <View style={styles.trackingContainer}>
-              <View style={styles.menuModalHeader}>
-                <TouchableOpacity
-                  style={styles.modalCloseBtn}
-                  onPress={() => setTrackingModalVisible(false)}
-                >
-                  <Text style={styles.modalCloseIcon}>✕</Text>
-                </TouchableOpacity>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.modalHeaderTitle}>Order {activeOrder.orderNumber}</Text>
-                  <Text style={styles.modalHeaderSub}>{activeOrder.kitchenName}</Text>
-                </View>
-              </View>
-
-              <ScrollView style={{ padding: 20 }}>
-                {/* 4-Digit Delivery OTP Card */}
-                <View style={styles.otpCard}>
-                  <Text style={styles.otpCardLabel}>DELIVERY VERIFICATION OTP</Text>
-                  <Text style={styles.otpCardNumber}>{activeOrder.deliveryOtp}</Text>
-                  <Text style={styles.otpCardNotice}>
-                    Share this 4-digit code with rider Ramesh upon doorstep arrival to receive your fresh meal.
-                  </Text>
-                </View>
-
-                {/* Milestone Stepper */}
-                <View style={styles.trackingTimeline}>
-                  <View style={styles.timelineStep}>
-                    <Text style={styles.stepIconDone}>✓</Text>
-                    <View style={styles.stepInfo}>
-                      <Text style={styles.stepTitle}>Order Confirmed</Text>
-                      <Text style={styles.stepSub}>Kitchen has accepted your meal request</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.timelineStep}>
-                    <Text style={styles.stepIconActive}>🍲</Text>
-                    <View style={styles.stepInfo}>
-                      <Text style={styles.stepTitle}>Cooking Fresh in Small Batch</Text>
-                      <Text style={styles.stepSub}>Homemaker Anita is simmering fresh phulkas & dal</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.timelineStep}>
-                    <Text style={styles.stepIconPending}>🛵</Text>
-                    <View style={styles.stepInfo}>
-                      <Text style={styles.stepTitlePending}>Neighborhood Delivery</Text>
-                      <Text style={styles.stepSub}>Rider assigned for rapid delivery (&lt; 20 mins)</Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Eco & Dabba Info */}
-                <View style={styles.ecoBox}>
-                  <Text style={styles.ecoTitle}>🌱 ESG Sustainability Impact</Text>
-                  <Text style={styles.ecoDesc}>
-                    By ordering in our returnable stainless steel dabbas, you prevented 2 single-use plastic takeaway containers from landfills!
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.dismissBtn}
-                  onPress={() => setTrackingModalVisible(false)}
-                >
-                  <Text style={styles.dismissBtnText}>Return to Marketplace</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          )}
-        </SafeAreaView>
-      </Modal>
-
-      {/* Authentication & Profile Modal */}
+      {/* Authentication Modal */}
       <AuthModal
         visible={authModalVisible}
         onClose={() => setAuthModalVisible(false)}
@@ -1329,50 +1674,71 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeContainer: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FDFBF7',
   },
-  topBar: {
+
+  // ===================== APP BAR =====================
+  brandAppBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingTop: Platform.OS === 'android' ? 12 : 8,
+    paddingBottom: 10,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#F3ECE4',
   },
-  topBarRight: {
+  brandLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    flex: 1,
   },
-  authTopBarBtn: {
-    backgroundColor: '#FFF7ED',
+  brandIconWrapper: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#FFF4ED',
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#FED7AA',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
   },
-  authTopBarText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#C2410C',
+  brandIcon: {
+    fontSize: 22,
   },
-  deliveringLabelRow: {
+  brandTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  liveGpsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  brandTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  artisanalBadge: {
     backgroundColor: '#ECFDF5',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  artisanalBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#065F46',
+    letterSpacing: 0.5,
+  },
+  locationPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
     gap: 4,
   },
   pulseDot: {
@@ -1381,185 +1747,98 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: '#10B981',
   },
-  liveGpsText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: '#059669',
-    letterSpacing: 0.5,
-  },
-  locationPin: {
-    fontSize: 15,
-  },
-  subAddressText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#94A3B8',
-    marginTop: 1,
-  },
-  gpsRefreshBtn: {
-    padding: 6,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  gpsRefreshIcon: {
+  locationMainText: {
     fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    maxWidth: 160,
   },
-  headerRight: {
+  locationDropdownArrow: {
+    fontSize: 11,
+    color: '#94A3B8',
+  },
+  brandRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  userProfileBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+  profileAvatarBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  userAvatarSm: {
+  userInitialsBadge: {
     width: 30,
     height: 30,
-    borderRadius: 15,
-    backgroundColor: '#EA580C',
+    borderRadius: 10,
+    backgroundColor: '#E05326',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  userAvatarSmText: {
+  userInitialsText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '900',
   },
-  userIconSm: {
-    fontSize: 18,
+  profileIconPlaceholder: {
+    fontSize: 17,
   },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  appTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#0F172A',
-  },
-  badgeHub: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  badgeHubText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#2563EB',
-  },
-  modeSwitchBtn: {
-    backgroundColor: '#FFF7ED',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#FDBA74',
-  },
-  modeSwitchHomemaker: {
-    backgroundColor: '#EA580C',
-    borderColor: '#C2410C',
-  },
-  modeSwitchText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#EA580C',
-  },
-  modeSwitchTextLight: {
-    color: '#FFFFFF',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'android' ? 14 : 10,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  locationLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#94A3B8',
-    letterSpacing: 0.8,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 3,
-    gap: 8,
-  },
-  locationText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  radiusPill: {
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#D1FAE5',
-  },
-  radiusPillText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#047857',
-  },
-  cartBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+  cartHeaderBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: '#FFF7ED',
     borderWidth: 1,
-    borderColor: '#FFEDD5',
+    borderColor: '#FED7AA',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
-  cartIcon: {
-    fontSize: 20,
+  cartHeaderEmoji: {
+    fontSize: 17,
   },
-  cartCountBadge: {
+  cartHeaderCounter: {
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#EA580C',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    backgroundColor: '#E05326',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cartCountBadgeText: {
-    color: '#FFF',
-    fontSize: 10,
+  cartHeaderCounterText: {
+    color: '#FFFFFF',
+    fontSize: 9,
     fontWeight: '900',
   },
-  searchContainer: {
+
+  // ===================== SCREEN BODY & TABS =====================
+  screenBody: {
+    flex: 1,
+    backgroundColor: '#FDFBF7',
+  },
+  mainFeedScroll: {
+    flex: 1,
+  },
+  mainFeedContent: {
+    paddingBottom: 24,
+  },
+
+  // Search Bar
+  searchBarWrapper: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingTop: 12,
+    paddingBottom: 8,
     backgroundColor: '#FFFFFF',
   },
-  searchBar: {
+  searchBarInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8FAFC',
@@ -1569,139 +1848,343 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  searchIcon: {
+  searchMagnifierIcon: {
     fontSize: 14,
     marginRight: 8,
   },
-  searchInput: {
+  searchTextInput: {
     flex: 1,
     fontSize: 13,
     fontWeight: '600',
     color: '#0F172A',
   },
-  clearSearch: {
+  searchClearBtn: {
+    fontSize: 13,
     color: '#94A3B8',
-    fontSize: 14,
-    fontWeight: '700',
     padding: 4,
   },
-  tabContainer: {
-    flexDirection: 'row',
+
+  // Stories
+  storiesContainer: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-  },
-  activeTab: {
-    backgroundColor: '#EA580C',
-  },
-  tabText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#475569',
-  },
-  activeTabText: {
-    color: '#FFFFFF',
-  },
-  radiusSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#F3ECE4',
   },
-  radiusSelectorLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  radiusButtons: {
+  sectionHeaderRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  flexRowCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
-  radiusBtn: {
+  liveRedDot: {
+    fontSize: 10,
+  },
+  sectionHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#0F172A',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  sectionHeaderSubAction: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#E05326',
+  },
+  storiesScrollContent: {
+    paddingHorizontal: 16,
+    gap: 14,
+  },
+  storyBubble: {
+    alignItems: 'center',
+    width: 66,
+  },
+  storyRingWrapper: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 2.5,
+    borderColor: '#E05326',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 2,
+  },
+  storyInnerCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storyEmoji: {
+    fontSize: 24,
+  },
+  storyChefName: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 4,
+  },
+  storyTagBadge: {
+    backgroundColor: '#FFF4ED',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  storyTagText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#C2410C',
+  },
+
+  // Category Carousel
+  categoryCarouselWrapper: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3ECE4',
+  },
+  categoryScrollContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  categoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 6,
   },
-  radiusBtnActive: {
-    backgroundColor: '#059669',
+  categoryPillActive: {
+    backgroundColor: '#E05326',
+    borderColor: '#E05326',
   },
-  radiusBtnText: {
+  categoryPillIcon: {
+    fontSize: 13,
+  },
+  categoryPillLabel: {
     fontSize: 11,
     fontWeight: '800',
     color: '#475569',
   },
-  radiusBtnTextActive: {
+  categoryPillLabelActive: {
     color: '#FFFFFF',
   },
-  scrollList: {
+
+  // Sustainability Hero Banner
+  sustainabilityHeroBanner: {
+    margin: 16,
+    backgroundColor: '#FFFBF5',
+    borderRadius: 20,
     padding: 16,
-    paddingBottom: 40,
-  },
-  promoBanner: {
-    backgroundColor: '#FFFBEB',
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#FEF3C7',
+    borderColor: '#FED7AA',
   },
-  promoHeader: {
-    marginBottom: 4,
+  bannerBadgeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
   },
-  promoTag: {
-    fontSize: 10,
+  bannerTagGreen: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  bannerTagGreenText: {
+    fontSize: 9,
     fontWeight: '900',
-    color: '#D97706',
+    color: '#065F46',
   },
-  promoTitle: {
+  bannerTagAmber: {
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  bannerTagAmberText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#C2410C',
+  },
+  sustainabilityHeroTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#0F172A',
+    lineHeight: 20,
+  },
+  sustainabilityHeroSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  societyPoolStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    padding: 10,
+    borderRadius: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    gap: 8,
+  },
+  societyPoolIcon: {
+    fontSize: 16,
+  },
+  societyPoolText: {
+    fontSize: 11,
+    color: '#1E40AF',
+    fontWeight: '700',
+  },
+  societyPoolSub: {
+    fontSize: 9,
+    color: '#3B82F6',
+    marginTop: 1,
+  },
+  societyPoolArrow: {
     fontSize: 14,
     fontWeight: '900',
-    color: '#78350F',
-    marginTop: 2,
+    color: '#1D4ED8',
   },
-  promoDesc: {
-    fontSize: 12,
-    color: '#92400E',
-    marginTop: 4,
-    lineHeight: 17,
+
+  // Marketplace Dual Switcher
+  marketplaceSwitchContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
-  card: {
+  marketplaceSwitchBar: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    padding: 3,
+    gap: 4,
+  },
+  marketplaceSwitchTab: {
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    borderRadius: 11,
+  },
+  marketplaceSwitchTabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  marketplaceSwitchText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  marketplaceSwitchTextActive: {
+    color: '#E05326',
+    fontWeight: '900',
+  },
+  radiusPillRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  radiusLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  radiusButtonsGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  radiusChip: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  radiusChipActive: {
+    backgroundColor: '#0D9488',
+  },
+  radiusChipText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  radiusChipTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Kitchen Feed
+  kitchensFeedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  feedHeadingTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  feedHeadingCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+
+  // Artisanal Kitchen Card
+  artisanalKitchenCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    marginBottom: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#F1F5F9',
-    elevation: 3,
+    borderColor: '#F3ECE4',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
+    elevation: 2,
   },
-  imageContainer: {
+  cardMediaContainer: {
     position: 'relative',
-    height: 160,
+    height: 165,
     width: '100%',
     backgroundColor: '#E2E8F0',
   },
-  cardImage: {
+  cardCoverImage: {
     width: '100%',
     height: '100%',
   },
-  imageOverlay: {
+  cardGradientOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'rgba(15, 23, 42, 0.25)',
   },
-  badgeRow: {
+  cardTopBadgeRow: {
     position: 'absolute',
     top: 10,
     left: 10,
@@ -1709,693 +2192,627 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  batchNoticeBadge: {
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  batchNoticeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
   distanceBadge: {
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  distanceText: {
+  distanceBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
   },
-  prepBadge: {
-    backgroundColor: '#EA580C',
+  cardBottomMediaStrip: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    right: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  timeBadge: {
+    backgroundColor: '#E05326',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  prepText: {
+  timeBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  hygieneBadge: {
+    backgroundColor: '#065F46',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  hygieneBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
     fontWeight: '800',
   },
-  cardBody: {
+  cardContentBody: {
     padding: 16,
   },
-  cardTitleRow: {
+  kitchenNameRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  kitchenName: {
+  kitchenNameTitle: {
     fontSize: 16,
     fontWeight: '900',
     color: '#0F172A',
     flex: 1,
     marginRight: 8,
   },
-  ratingBadge: {
+  ratingPill: {
     backgroundColor: '#059669',
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: 7,
   },
-  ratingText: {
+  ratingPillText: {
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '900',
   },
-  cuisines: {
+  kitchenCuisinesSubtitle: {
     fontSize: 12,
     color: '#64748B',
-    marginTop: 4,
-    fontWeight: '500',
+    marginTop: 3,
+    fontWeight: '600',
   },
-  storyBox: {
-    backgroundColor: '#FFF7ED',
+  chefStoryQuoteBox: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFBF5',
     borderRadius: 12,
     padding: 10,
     marginTop: 10,
     borderWidth: 1,
-    borderColor: '#FFEDD5',
+    borderColor: '#FED7AA',
+    gap: 8,
   },
-  storyLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#C2410C',
-    marginBottom: 2,
+  chefStoryQuoteEmoji: {
+    fontSize: 16,
   },
-  storyText: {
-    fontSize: 12,
+  chefStoryQuoteText: {
+    flex: 1,
+    fontSize: 11,
     fontStyle: 'italic',
     color: '#9A3412',
     lineHeight: 16,
   },
-  cardFooter: {
+  cardFooterActionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: '#F3ECE4',
   },
-  priceText: {
+  priceForTwoLabel: {
+    fontSize: 9,
+    color: '#94A3B8',
+    fontWeight: '700',
+  },
+  priceForTwoValue: {
     fontSize: 13,
     fontWeight: '900',
     color: '#0F172A',
   },
-  priceSub: {
-    fontSize: 11,
+  priceForTwoMuted: {
+    fontSize: 10,
     fontWeight: '500',
     color: '#94A3B8',
   },
-  actionPill: {
+  viewMenuCTA: {
     backgroundColor: '#FFF7ED',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
   },
-  actionPillText: {
+  viewMenuCTAText: {
     fontSize: 11,
-    fontWeight: '800',
-    color: '#EA580C',
+    fontWeight: '900',
+    color: '#E05326',
   },
-  loadingContainer: {
+
+  // Loader & Empty
+  loaderCenter: {
     alignItems: 'center',
-    paddingVertical: 50,
+    paddingVertical: 60,
   },
-  loadingText: {
+  loaderText: {
     fontSize: 12,
-    fontWeight: '600',
     color: '#94A3B8',
+    fontWeight: '600',
     marginTop: 10,
   },
-  emptyState: {
+  emptyResultsCard: {
     alignItems: 'center',
-    paddingVertical: 50,
-    paddingHorizontal: 20,
-  },
-  emptyIcon: {
-    fontSize: 36,
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1E293B',
-  },
-  emptySub: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  expandBtn: {
-    marginTop: 14,
-    backgroundColor: '#EA580C',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  expandBtnText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-
-  // Floating Cart Bar
-  floatingCartBar: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  floatingCartCount: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  floatingCartSub: {
-    color: '#94A3B8',
-    fontSize: 11,
-  },
-  floatingCheckoutBtn: {
-    backgroundColor: '#EA580C',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  floatingCheckoutBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-
-  // Modal Common
-  modalSafe: {
-    flex: 1,
+    padding: 30,
+    marginHorizontal: 16,
     backgroundColor: '#FFFFFF',
-  },
-  menuModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  modalCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCloseIcon: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  modalHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#0F172A',
-  },
-  modalHeaderSub: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  menuSubTabs: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#F8FAFC',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    gap: 8,
-  },
-  menuSubTab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  menuSubTabActive: {
-    backgroundColor: '#EA580C',
-    borderColor: '#EA580C',
+  emptyResultsEmoji: {
+    fontSize: 40,
+    marginBottom: 10,
   },
-  menuSubTabText: {
-    fontSize: 12,
+  emptyResultsTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  emptyResultsSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  expandRadiusBtn: {
+    marginTop: 14,
+    backgroundColor: '#E05326',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  expandRadiusBtnText: {
+    color: '#FFF',
+    fontSize: 11,
     fontWeight: '800',
-    color: '#475569',
   },
-  menuSubTabTextActive: {
-    color: '#FFFFFF',
+
+  // ===================== EXPLORE TAB =====================
+  exploreHeroHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 10,
   },
-  menuScroll: {
+  exploreHeaderTag: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#E05326',
+    letterSpacing: 1,
+  },
+  exploreHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  exploreHeaderSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 4,
+    lineHeight: 17,
+  },
+  curatedExploreCard: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    borderRadius: 18,
     padding: 16,
+    borderWidth: 1,
   },
-  menuItemRow: {
+  curatedTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  dietRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  vegIcon: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#059669',
-  },
-  nonVegIcon: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#DC2626',
-  },
-  specialBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  specialBadgeText: {
+  curatedTag: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#B45309',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  menuItemName: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  menuItemPrice: {
-    fontSize: 13,
+  curatedArrow: {
+    fontSize: 10,
     fontWeight: '900',
-    color: '#0F172A',
-    marginTop: 2,
   },
-  menuItemDesc: {
+  curatedTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  curatedDesc: {
     fontSize: 11,
-    color: '#64748B',
     marginTop: 4,
-    lineHeight: 15,
-  },
-  portionNotice: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#EA580C',
-    marginTop: 6,
-  },
-  itemActionCol: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addBtn: {
-    backgroundColor: '#FFF7ED',
-    borderWidth: 1,
-    borderColor: '#FFEDD5',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  addBtnText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#EA580C',
-  },
-  stepperContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EA580C',
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  stepperMinus: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  stepperPlus: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  stepperSign: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  stepperQty: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '900',
-    paddingHorizontal: 6,
+    lineHeight: 16,
+    opacity: 0.9,
   },
 
-  // Tiffin Plans
-  planCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
+  // ===================== TIFFINS TAB =====================
+  tiffinHeroCard: {
+    margin: 16,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 20,
+    padding: 18,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#FDBA74',
   },
-  planBadge: {
-    backgroundColor: '#EFF6FF',
+  tiffinHeroBadge: {
+    backgroundColor: '#EA580C',
     alignSelf: 'flex-start',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
     marginBottom: 6,
   },
-  planBadgeText: {
-    fontSize: 10,
+  tiffinHeroBadgeText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  tiffinHeroTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#7C2D12',
+  },
+  tiffinHeroSubtitle: {
+    fontSize: 11,
+    color: '#9A3412',
+    marginTop: 4,
+    lineHeight: 16,
+  },
+  tiffinPerksRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#FED7AA',
+  },
+  tiffinPerk: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  tiffinPerkIcon: {
+    fontSize: 18,
+  },
+  tiffinPerkText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#7C2D12',
+  },
+  tiffinSectionHeading: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginHorizontal: 16,
+    marginBottom: 10,
+  },
+  planCardNew: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  planCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  planPackBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  planPackBadgeText: {
+    fontSize: 9,
     fontWeight: '900',
     color: '#2563EB',
   },
-  planTitle: {
+  planDietPill: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  planTitleNew: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  planDescNew: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 4,
+    lineHeight: 15,
+  },
+  planDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 12,
+  },
+  planPricingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  planPricePerMeal: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  planPriceTotal: {
     fontSize: 15,
     fontWeight: '900',
     color: '#0F172A',
   },
-  planDesc: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 4,
-    lineHeight: 16,
-  },
-  planFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  planPrice: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#0F172A',
-  },
-  planSubscribeBtn: {
-    backgroundColor: '#059669',
+  planSubscribeCTA: {
+    backgroundColor: '#0D9488',
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 10,
   },
-  planSubscribeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
+  planSubscribeCTAText: {
+    color: '#FFF',
+    fontSize: 11,
     fontWeight: '900',
   },
 
-  // Cart & Checkout
-  cartScroll: {
-    padding: 16,
-  },
-  cartSection: {
+  // ===================== ORDERS TAB =====================
+  activeOrderBanner: {
+    margin: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  cartSectionTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#0F172A',
-    marginBottom: 10,
-  },
-  cartItemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
-  },
-  cartItemName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  cartItemPrice: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#64748B',
-    marginTop: 2,
-  },
-  slotGrid: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  slotCard: {
-    flex: 1,
+    borderRadius: 20,
+    padding: 18,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
   },
-  slotCardActive: {
-    borderColor: '#EA580C',
-    backgroundColor: '#FFF7ED',
-  },
-  slotTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#475569',
-  },
-  slotTitleActive: {
-    color: '#EA580C',
-  },
-  slotDesc: {
-    fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 2,
-  },
-  dabbaCheckbox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 14,
-  },
-  dabbaCheckIcon: {
-    fontSize: 20,
-  },
-  dabbaTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#166534',
-  },
-  dabbaDesc: {
-    fontSize: 10,
-    color: '#15803D',
-    marginTop: 2,
-  },
-  billRow: {
+  activeOrderBannerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    alignItems: 'flex-start',
+    marginBottom: 14,
   },
-  billLabel: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  billValue: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  billTotalRow: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  billTotalLabel: {
-    fontSize: 14,
+  activeOrderTag: {
+    fontSize: 9,
     fontWeight: '900',
-    color: '#0F172A',
+    color: '#E05326',
+    letterSpacing: 0.5,
   },
-  billTotalValue: {
+  activeOrderKitchenName: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#EA580C',
+    color: '#0F172A',
+    marginTop: 2,
   },
-  checkoutBtn: {
-    backgroundColor: '#EA580C',
-    paddingVertical: 14,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 10,
+  activeOrderItemsSummary: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
   },
-  checkoutBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+  activeOrderAmtPill: {
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  activeOrderAmtText: {
+    fontSize: 13,
     fontWeight: '900',
+    color: '#C2410C',
   },
-  btnDisabled: {
-    opacity: 0.6,
-  },
-
-  // Tracking Modal
-  trackingContainer: {
-    flex: 1,
-  },
-  otpCard: {
+  heroOtpCard: {
     backgroundColor: '#0F172A',
-    borderRadius: 18,
-    padding: 18,
+    borderRadius: 16,
+    padding: 16,
     alignItems: 'center',
     marginBottom: 16,
   },
-  otpCardLabel: {
-    fontSize: 10,
+  heroOtpLabel: {
+    fontSize: 9,
     fontWeight: '900',
     color: '#94A3B8',
     letterSpacing: 1,
   },
-  otpCardNumber: {
-    fontSize: 36,
+  heroOtpDigits: {
+    fontSize: 34,
     fontWeight: '900',
     color: '#38BDF8',
-    letterSpacing: 6,
-    marginVertical: 6,
+    letterSpacing: 8,
+    marginVertical: 4,
   },
-  otpCardNotice: {
-    fontSize: 11,
+  heroOtpNotice: {
+    fontSize: 10,
     color: '#CBD5E1',
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 14,
   },
-  trackingTimeline: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
+  liveTimelineStepper: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginBottom: 16,
-    gap: 16,
-  },
-  timelineStep: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
   },
-  stepIconDone: {
-    fontSize: 14,
+  timelineStepItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stepCircleDone: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepCircleDoneText: {
+    fontSize: 12,
     fontWeight: '900',
     color: '#059669',
-    backgroundColor: '#ECFDF5',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    textAlign: 'center',
-    lineHeight: 32,
   },
-  stepIconActive: {
-    fontSize: 16,
+  stepCircleActive: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#FFF7ED',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    textAlign: 'center',
-    lineHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  stepIconPending: {
-    fontSize: 16,
-    backgroundColor: '#F1F5F9',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    textAlign: 'center',
-    lineHeight: 32,
+  stepCircleActiveEmoji: {
+    fontSize: 13,
   },
-  stepInfo: {
+  stepCirclePending: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepCirclePendingText: {
+    fontSize: 12,
+  },
+  stepInfoCol: {
     flex: 1,
   },
-  stepTitle: {
+  stepHeaderBold: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  stepHeaderBoldActive: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#E05326',
+  },
+  stepHeaderPending: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  stepSubDetail: {
+    fontSize: 10,
+    color: '#64748B',
+  },
+  dabbaStatusBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    gap: 10,
+  },
+  dabbaIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dabbaStatusTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#166534',
+  },
+  dabbaStatusDesc: {
+    fontSize: 10,
+    color: '#15803D',
+    marginTop: 1,
+    lineHeight: 14,
+  },
+  pastOrdersTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  pastOrderCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  pastOrderTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  pastOrderKitchen: {
     fontSize: 13,
     fontWeight: '800',
     color: '#0F172A',
   },
-  stepTitlePending: {
-    fontSize: 13,
-    fontWeight: '700',
+  pastOrderItems: {
+    fontSize: 11,
+    color: '#475569',
+    marginTop: 2,
+  },
+  pastOrderDate: {
+    fontSize: 9,
     color: '#94A3B8',
+    marginTop: 4,
   },
-  stepSub: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  ecoBox: {
-    backgroundColor: '#F0FDF4',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-    marginBottom: 16,
-  },
-  ecoTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#166534',
-  },
-  ecoDesc: {
-    fontSize: 11,
-    color: '#15803D',
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  dismissBtn: {
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  dismissBtnText: {
+  pastOrderAmt: {
     fontSize: 13,
-    fontWeight: '800',
-    color: '#334155',
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  pastOrderDeliveredPill: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  pastOrderDeliveredText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#059669',
   },
 
-  // Homemaker Studio Styles
-  studioContainer: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#F8FAFC',
-  },
-  studioCard: {
+  // ===================== STUDIO TAB =====================
+  studioHeroCard: {
+    margin: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginBottom: 14,
   },
   studioHeaderRow: {
     flexDirection: 'row',
@@ -2411,116 +2828,143 @@ const styles = StyleSheet.create({
   studioKitchenTitle: {
     fontSize: 11,
     color: '#64748B',
-    marginTop: 2,
+    marginTop: 1,
   },
-  statusToggle: {
+  statusToggleBtn: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
   },
-  statusOpen: {
+  statusOpenBtn: {
     backgroundColor: '#ECFDF5',
     borderWidth: 1,
     borderColor: '#A7F3D0',
   },
-  statusClosed: {
+  statusClosedBtn: {
     backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: '#FECACA',
   },
-  statusToggleText: {
-    fontSize: 10,
+  statusToggleBtnText: {
+    fontSize: 9,
     fontWeight: '900',
     color: '#047857',
   },
-  statGrid: {
+  studioStatGrid: {
     flexDirection: 'row',
     gap: 8,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
     paddingTop: 12,
   },
-  statBox: {
+  studioStatBox: {
     flex: 1,
     backgroundColor: '#F8FAFC',
     borderRadius: 12,
     padding: 10,
     alignItems: 'center',
   },
-  statNumber: {
+  studioStatNumber: {
     fontSize: 15,
     fontWeight: '900',
     color: '#0F172A',
   },
-  statLabel: {
+  studioStatLabel: {
     fontSize: 9,
-    fontWeight: '700',
     color: '#64748B',
     marginTop: 2,
+    fontWeight: '700',
   },
-  sectionHeadingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#0F172A',
-  },
-  sectionSubtitle: {
-    fontSize: 10,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  orderCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
+  upiPayoutBox: {
+    marginTop: 12,
+    backgroundColor: '#ECFDF5',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  orderCardTop: {
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    padding: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  orderNumber: {
+  upiPayoutTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#065F46',
+  },
+  upiPayoutSub: {
+    fontSize: 9,
+    color: '#047857',
+  },
+  upiPayoutActionPill: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  upiPayoutActionText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  sectionHeadingWithSub: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  sectionMainTitle: {
     fontSize: 13,
     fontWeight: '900',
     color: '#0F172A',
   },
-  orderCustomer: {
+  sectionSubtitleText: {
+    fontSize: 10,
+    color: '#64748B',
+  },
+  homemakerOrderCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  homemakerOrderCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  homemakerOrderNumber: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  homemakerCustomerName: {
     fontSize: 11,
     color: '#64748B',
-    marginTop: 2,
   },
-  statusPill: {
+  orderStateBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: 7,
   },
-  statusPrep: {
+  orderStatePrep: {
     backgroundColor: '#FEF3C7',
   },
-  statusReady: {
+  orderStateReady: {
     backgroundColor: '#ECFDF5',
   },
-  statusPillText: {
-    fontSize: 10,
+  orderStateBadgeText: {
+    fontSize: 9,
     fontWeight: '900',
     color: '#92400E',
   },
-  orderItems: {
+  homemakerOrderItems: {
     fontSize: 12,
     fontWeight: '700',
     color: '#1E293B',
-    marginTop: 8,
+    marginTop: 6,
   },
-  orderFooter: {
+  homemakerOrderFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -2529,114 +2973,628 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F8FAFC',
   },
-  orderAmount: {
-    fontSize: 12,
+  homemakerOrderAmt: {
+    fontSize: 11,
     fontWeight: '800',
     color: '#64748B',
   },
-  readyBtn: {
+  markReadyBtn: {
     backgroundColor: '#059669',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
-  readyBtnText: {
+  markReadyBtnText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
   },
-  otpPill: {
+  otpReadyPill: {
     backgroundColor: '#EFF6FF',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  otpPillText: {
-    fontSize: 11,
+  otpReadyPillText: {
+    fontSize: 10,
     fontWeight: '900',
     color: '#2563EB',
   },
-  menuBatchCard: {
+  batchLimiterCard: {
+    marginHorizontal: 16,
+    marginBottom: 8,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  menuBatchInfo: {
-    flex: 1,
-    paddingRight: 10,
+  batchItemName: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F172A',
   },
-  menuBatchName: {
+  batchItemPrice: {
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  portionsRemainingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  portionsLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#94A3B8',
+  },
+  portionsValue: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#059669',
+  },
+  portionsValueLow: {
+    color: '#DC2626',
+  },
+  stepperActionCol: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  stepperRowGroup: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  portionAdjustBtn: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  portionAdjustBtnAdd: {
+    backgroundColor: '#E05326',
+  },
+  portionAdjustBtnText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  soldOutPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 5,
+  },
+  soldOutPillText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#DC2626',
+  },
+
+  // ===================== FLOATING CART PILL =====================
+  floatingCartPillContainer: {
+    position: 'absolute',
+    bottom: 64,
+    left: 16,
+    right: 16,
+  },
+  floatingCartPill: {
+    backgroundColor: '#0F172A',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  floatingCartLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  floatingCartCounterCircle: {
+    backgroundColor: '#E05326',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingCartCounterText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  floatingCartTotalAmount: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  floatingCartSubNotice: {
+    color: '#94A3B8',
+    fontSize: 9,
+  },
+  floatingCartCheckoutCTA: {
+    backgroundColor: '#E05326',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  floatingCartCheckoutCTAText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  // ===================== BOTTOM NAVIGATION BAR =====================
+  bottomNavigationBar: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F1EBE4',
+    paddingVertical: 6,
+    paddingBottom: Platform.OS === 'ios' ? 14 : 8,
+  },
+  bottomNavTabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    paddingVertical: 2,
+  },
+  bottomNavIconWrapper: {
+    position: 'relative',
+  },
+  bottomNavIcon: {
+    fontSize: 20,
+    opacity: 0.6,
+  },
+  bottomNavIconSelected: {
+    opacity: 1,
+  },
+  bottomNavBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: '#E05326',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomNavBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '900',
+  },
+  bottomNavLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  bottomNavLabelSelected: {
+    color: '#E05326',
+    fontWeight: '900',
+  },
+  bottomNavActiveIndicator: {
+    position: 'absolute',
+    bottom: -4,
+    width: 16,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#E05326',
+  },
+
+  // ===================== MODALS =====================
+  menuModalSafe: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeaderTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1EBE4',
+  },
+  modalBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBackIcon: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  modalKitchenTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#0F172A',
+  },
+  modalKitchenSubtitle: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  modalSubTabsBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    gap: 8,
+  },
+  modalSubTabItem: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  modalSubTabItemActive: {
+    backgroundColor: '#E05326',
+    borderColor: '#E05326',
+  },
+  modalSubTabText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  modalSubTabTextActive: {
+    color: '#FFFFFF',
+  },
+  modalScrollBody: {
+    padding: 16,
+  },
+  dishCardRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  dietSpecialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  vegSquareDot: {
+    width: 14,
+    height: 14,
+    borderWidth: 1.5,
+    borderColor: '#059669',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 3,
+  },
+  vegInnerCircle: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#059669',
+  },
+  nonVegSquareDot: {
+    width: 14,
+    height: 14,
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 3,
+  },
+  nonVegInnerCircle: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#DC2626',
+  },
+  dietLabelText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  dailySpecialBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  dailySpecialBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#B45309',
+  },
+  dishNameText: {
     fontSize: 13,
     fontWeight: '800',
     color: '#0F172A',
   },
-  menuBatchPrice: {
-    fontSize: 11,
-    color: '#64748B',
+  dishPriceText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#0F172A',
     marginTop: 2,
   },
-  portionCountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
+  dishDescriptionText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 4,
+    lineHeight: 15,
   },
-  portionCountLabel: {
+  dishPortionsNotice: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#94A3B8',
+    color: '#E05326',
+    marginTop: 4,
   },
-  portionCountValue: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#059669',
+  dishAddCol: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  stepperCol: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  portionBtn: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  dishAddButton: {
+    backgroundColor: '#FFF4ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
     borderRadius: 8,
   },
-  portionBtnAdd: {
-    backgroundColor: '#EA580C',
+  dishAddButtonText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#E05326',
   },
-  portionBtnText: {
+  dishStepperBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E05326',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  dishStepperBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  dishStepperBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  dishStepperCount: {
+    color: '#FFFFFF',
     fontSize: 12,
+    fontWeight: '900',
+    paddingHorizontal: 6,
+  },
+
+  // Checkout Sections
+  checkoutSectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F1EBE4',
+  },
+  checkoutSectionHeader: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 10,
+  },
+  checkoutItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  checkoutItemName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  checkoutItemPrice: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  societyPoolTopHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  societySelectorChip: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  societySelectorChipActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  societySelectorChipText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1E40AF',
+  },
+  societySavingsNotice: {
+    fontSize: 10,
+    color: '#1D4ED8',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  customizerLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  customizerButtonGroup: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 8,
+  },
+  customizerPill: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  customizerPillActive: {
+    backgroundColor: '#D97706',
+    borderColor: '#D97706',
+  },
+  customizerPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#78350F',
+  },
+  chefCustomNoteInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 11,
+    color: '#78350F',
+    marginTop: 4,
+  },
+  elderCareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  elderCareTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#881337',
+  },
+  elderCareSub: {
+    fontSize: 9,
+    color: '#9F1239',
+  },
+  slotCardsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  slotSelectCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  slotSelectCardActive: {
+    borderColor: '#E05326',
+    backgroundColor: '#FFF7ED',
+  },
+  slotSelectTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  slotSelectTitleActive: {
+    color: '#E05326',
+  },
+  slotSelectSub: {
+    fontSize: 9,
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  dabbaReturnCommitmentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+  },
+  dabbaReturnTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#166534',
+  },
+  dabbaReturnDesc: {
+    fontSize: 9,
+    color: '#15803D',
+    marginTop: 2,
+    lineHeight: 13,
+  },
+  billLineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  billLineLabel: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  billLineValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  billTotalLine: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  billTotalLabel: {
+    fontSize: 13,
     fontWeight: '900',
     color: '#0F172A',
   },
-  soldOutBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: '#FEF2F2',
-    borderRadius: 6,
-  },
-  soldOutText: {
-    fontSize: 10,
+  billTotalValue: {
+    fontSize: 15,
     fontWeight: '900',
-    color: '#DC2626',
+    color: '#E05326',
   },
-  textGreen: {
-    color: '#059669',
+  confirmCheckoutBtn: {
+    backgroundColor: '#E05326',
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginTop: 8,
   },
-  textRed: {
-    color: '#DC2626',
-  },
-  textWhite: {
+  confirmCheckoutBtnText: {
     color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
   },
 });
